@@ -1,7 +1,10 @@
 /*
- * Open Source RFID Access Controller
+ * Open Source RFID Access Controller - Ethernet Branch
  *
- * 4/3/2011 v1.32
+ * 8/8/2012 v0.01 (branch based on upstream 4/3/2011 v1.32)
+ * Will Bradley - will@heatsynclabs.org
+ * 
+ * Upstream:
  * Last build test with Arduino v00.21
  * Arclight - arclight@23.org
  * Danozano - danozano@gmail.com
@@ -12,13 +15,13 @@
  * high seas pirates. No warranties are expressed on implied.
  * You are warned.
  *
+ * For latest downloads of this ETHERNET branch, check out
+ * https://github.com/zyphlar/Open_Access_Control_Ethernet
  *
- * For latest downloads, including Eagle CAD files for the hardware, check out
+ * For latest downloads of the UPSTREAM software, including 
+ * Eagle CAD files for the hardware, check out
  * http://code.google.com/p/open-access-control/downloads/list
  *
- * Latest update moves strings to PROGMEM to free up memory and adds a 
- * console password feature.
- * 
  *
  * This program interfaces the Arduino to RFID, PIN pad and all
  * other input devices using the Wiegand-26 Communications
@@ -43,7 +46,9 @@
  *
  * Quickstart tips: 
  * Set the console password(PRIVPASSWORD) value to a numeric DEC or HEX value.
- * Define the static user list by swiping a tag and copying the value received into the #define values shown below 
+ * Define the static user list by swiping a tag and copying the value received into the #define values shown below under Adam, Bob, and Carl.
+ * Change MAC, IP, and SERVER as appropriate for your network.
+ * See the lines containing "~access" in this file for how your webserver should be structured for rudimentary logging.
  * Compile and upload the code, then log in via serial console at 57600,8,N,1
  *
  */
@@ -52,12 +57,12 @@
 #include <EEPROM.h>       // Needed for saving to non-voilatile memory on the Arduino.
 #include <avr/pgmspace.h> // Allows data to be stored in FLASH instead of RAM
 
-/*
-#include <Ethernet.h>   // Ethernet stuff, comment out if not used.
+
+#include <Ethernet.h>     // Ethernet stuff
 #include <SPI.h>          
 #include <Server.h>
 #include <Client.h>
-*/
+
 
 #include <DS1307.h>       // DS1307 RTC Clock/Date/Time chip library
 #include <WIEGAND26.h>    // Wiegand 26 reader format libary
@@ -67,12 +72,12 @@
 /* Static user List - Implemented as an array for testing and access override 
  */                               
 
-#define DEBUG 1                         // Set to 2 for display of raw tag numbers in log files, 1 for only denied, 0 for never.               
+#define DEBUG 2                         // Set to 2 for display of raw tag numbers in log files, 1 for only denied, 0 for never.               
 
-#define gonzo   0x1234                  // Name and badge number in HEX. We are not using checksums or site ID, just the whole
-#define snake   0x1234                  // output string from the reader.
-#define satan   0x1234
-const long  superUserList[] = { gonzo, snake, satan};  // Super user table (cannot be changed by software)
+#define adam   0xABCDE                  // Name and badge number in HEX. We are not using checksums or site ID, just the whole
+#define bob   0xBCDEF                  // output string from the reader.
+#define carl   0xA1B2C3
+const long  superUserList[] = { adam, bob, carl};  // Super user table (cannot be changed by software)
 
 #define PRIVPASSWORD 0x1234             // Console "priveleged mode" password
 
@@ -153,6 +158,19 @@ byte inCount=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
 
 
+// Enter a MAC address and IP address for your controller below.
+// The IP address will be dependent on your local network:
+byte mac[] = {  0xAB, 0xBA, 0xDA, 0xDE, 0xFE, 0xED };
+byte ip[] = { 192,168,1,199 };
+byte server[] = { 192,168,1,200 }; // webserver for logging, access control, etc
+
+// Initialize the Ethernet client library
+// with the IP address and port of the server 
+// that you want to connect to (port 80 is default for HTTP):
+Client client(server, 80);
+
+// strings for storing results from web server
+String httpresponse = "";
 
 /* Create an instance of the various C++ libraries we are using.
  */
@@ -165,30 +183,30 @@ PCATTACH pcattach;    // Software interrupt library
  * RAM for something else.
 */
 
-const prog_uchar rebootMessage[]          PROGMEM  = {"Access Control System rebooted."};
+const prog_uchar rebootMessage[]          PROGMEM  = {"AccessControlSystemRebooted"};
 
-const prog_uchar doorChimeMessage[]       PROGMEM  = {"Front Door opened."};
-const prog_uchar doorslockedMessage[]     PROGMEM  = {"All Doors relocked"};
-const prog_uchar alarmtrainMessage[]      PROGMEM  = {"Alarm Training performed."};
-const prog_uchar privsdeniedMessage[]     PROGMEM  = {"Access Denied. Priveleged mode is not enabled."};
-const prog_uchar privsenabledMessage[]    PROGMEM  = {"Priveleged mode enabled."};
-const prog_uchar privsdisabledMessage[]   PROGMEM  = {"Priveleged mode disabled."};
-const prog_uchar privsAttemptsMessage[]   PROGMEM  = {"Too many failed attempts. Try again later."};
+const prog_uchar doorChimeMessage[]       PROGMEM  = {"FrontDoorOpened"};
+const prog_uchar doorslockedMessage[]     PROGMEM  = {"AllDoorsRelocked"};
+const prog_uchar alarmtrainMessage[]      PROGMEM  = {"AlarmTrainingPerformed."};
+const prog_uchar privsdeniedMessage[]     PROGMEM  = {"AccessDeniedPrivelegedModeIsNotEnabled"};
+const prog_uchar privsenabledMessage[]    PROGMEM  = {"PrivelegedModeEnabled"};
+const prog_uchar privsdisabledMessage[]   PROGMEM  = {"PrivelegedModeDisabled"};
+const prog_uchar privsAttemptsMessage[]   PROGMEM  = {"TooManyFailedAttemptsTryAgainLater"};
 
-const prog_uchar consolehelpMessage1[]    PROGMEM  = {"Valid commands are:"};
-const prog_uchar consolehelpMessage2[]    PROGMEM  = {"(d)ate, (s)show user, (m)odify user <num>  <usermask> <tagnumber>"};
-const prog_uchar consolehelpMessage3[]    PROGMEM  = {"(a)ll user dump,(r)emove_user <num>,(o)open door <num>"};
-const prog_uchar consolehelpMessage4[]    PROGMEM  = {"(u)nlock all doors,(l)lock all doors"};
-const prog_uchar consolehelpMessage5[]    PROGMEM  = {"(1)disarm_alarm, (2)arm_alarm,(3)train_alarm (9)show_status"};
-const prog_uchar consolehelpMessage6[]    PROGMEM  = {"(e)nable <password> - enable or disable priveleged mode"};                                       
-const prog_uchar consoledefaultMessage[]  PROGMEM  = {"Invalid command. Press '?' for help."};
+const prog_uchar consolehelpMessage1[]    PROGMEM  = {"ValidCommandsAre"};
+const prog_uchar consolehelpMessage2[]    PROGMEM  = {"Date-ShowUser-ModifyUser_num_usermask_tagnumber"};
+const prog_uchar consolehelpMessage3[]    PROGMEM  = {"AllUserDump-RemoveUser_num-OpenDoor_num"};
+const prog_uchar consolehelpMessage4[]    PROGMEM  = {"UnlockAllDoors-LockAllDoors"};
+const prog_uchar consolehelpMessage5[]    PROGMEM  = {"1_DisarmAlarm-2_ArmAlarm-3_TrainAlarm-9_ShowStatus"};
+const prog_uchar consolehelpMessage6[]    PROGMEM  = {"Enable_password"};                                       
+const prog_uchar consoledefaultMessage[]  PROGMEM  = {"InvalidCommandPressQuestionMarkForHelp"};
 
-const prog_uchar statusMessage1[]         PROGMEM  = {"Alarm armed state (1=armed):"};
-const prog_uchar statusMessage2[]         PROGMEM  = {"Alarm siren state (1=activated):"};
-const prog_uchar statusMessage3[]         PROGMEM  = {"Front door open state (0=closed):"};
-const prog_uchar statusMessage4[]         PROGMEM  = {"Roll up door open state (0=closed):"};     
-const prog_uchar statusMessage5[]         PROGMEM  = {"Door 1 unlocked state(1=locked):"};                   
-const prog_uchar statusMessage6[]         PROGMEM  = {"Door 2 unlocked state(1=locked):"}; 
+const prog_uchar statusMessage1[]         PROGMEM  = {"AlarmArmedState_1_Armed"};
+const prog_uchar statusMessage2[]         PROGMEM  = {"AlarmSirenState_1_Activated"};
+const prog_uchar statusMessage3[]         PROGMEM  = {"FrontDoorOpenState_0_Closed"};
+const prog_uchar statusMessage4[]         PROGMEM  = {"RearUpDoorOpenState_0_Closed"};     
+const prog_uchar statusMessage5[]         PROGMEM  = {"Door1UnlockedState_1_Locked"};                   
+const prog_uchar statusMessage6[]         PROGMEM  = {"Door2UnlockedState_1_Locked"}; 
 
 
 
@@ -218,7 +236,7 @@ void setup(){           // Runs once at Arduino boot-up
   }
 
 
- //ds1307.setDateDs1307(0,37,23,6,25,2,11);         
+  ds1307.setDateDs1307(0,49,1,3,7,6,11);         
   /*  Sets the date/time (needed once at commissioning)
    
    byte second,        // 0-59
@@ -233,6 +251,12 @@ void setup(){           // Runs once at Arduino boot-up
 
 
   Serial.begin(57600);	               	       // Set up Serial output at 8,N,1,57600bps
+  
+  // start the Ethernet connection:
+  Ethernet.begin(mac, ip);
+  // wait a bit
+  delay(10000);
+  
   logReboot();
   chirpAlarm(1);                               // Chirp the alarm to show system ready.
 
@@ -242,7 +266,11 @@ void setup(){           // Runs once at Arduino boot-up
 
 }
 void loop()                                     // Main branch, runs over and over again
-{                         
+{             
+    // if the server's disconnected, stop the client:
+    if (!client.connected()) {
+      client.stop();
+    }  
 
 readCommand();                                 // Check for commands entered at serial console
 
@@ -916,20 +944,39 @@ void PROGMEMprintln(const prog_uchar str[])    // Function to retrieve logging s
 {                                              // Prints newline after each string  
   char c;
   if(!str) return;
-  while((c = pgm_read_byte(str++))){
-    Serial.print(c,BYTE);
-                                   }
-    Serial.println();
+  
+  if(client.connect()) { 
+    client.print("GET /~access/log/?device=door&data="); 
+    while((c = pgm_read_byte(str++))){
+      Serial.print(c,BYTE);
+      client.print(c,BYTE);
+    }
+    client.println(" HTTP/1.0");
+    client.println();  
+    client.stop();                             
+    // reset values coming from http
+    httpresponse = "";   
+  }
+  Serial.println();
 }
 
 void PROGMEMprint(const prog_uchar str[])    // Function to retrieve logging strings from program memory
 {                                            // Does not print newlines
+  
   char c;
   if(!str) return;
-  while((c = pgm_read_byte(str++))){
-    Serial.print(c,BYTE);
-                                   }
-
+  if(client.connect()) { 
+    client.print("GET /~access/log/?device=door&data="); 
+    while((c = pgm_read_byte(str++))){
+      Serial.print(c,BYTE);
+      client.print(c,BYTE);
+    }
+    client.println(" HTTP/1.0");
+    client.println();  
+    client.stop();                             
+    // reset values coming from http
+    httpresponse = ""; 
+  }
 }
 
 
@@ -1229,7 +1276,6 @@ int checkUser(unsigned long tagNumber)                                  // Check
 
 
     if((EEPROM_buffer == tagNumber) && (tagNumber !=0xFFFFFFFF) && (tagNumber !=0x0)) {    // Return a not found on blank (0xFFFFFFFF) entries 
-      logDate();
       Serial.print("User ");
       Serial.print(((i-EEPROM_FIRSTUSER)/5),DEC);
       Serial.println(" authenticated.");
@@ -1279,11 +1325,9 @@ void dumpUser(byte usernum)                                            // Return
                  }
      else {
            if(EEPROM_buffer != 0xFFFFFFFF) {
-             Serial.print("********");}
+             Serial.println("********");
            }
-
-
-
+     }
   
   }
   else Serial.println("Bad user number!");
@@ -1381,7 +1425,7 @@ if(inCount==0) {
 
                       for(int i=0; i<(NUMUSERS); i++){
                         dumpUser(i);
-                        Serial.println();
+                        //Serial.println();  // commented out due to dumpUser now always printing a line -WB 7-7-2011
                                                       }
                                                   }
                  else{logprivFail();}
@@ -1396,7 +1440,7 @@ if(inCount==0) {
                      Serial.print(" ");
                      Serial.println("TagNum:");
                      dumpUser(atoi(cmdString[1]));
-                     Serial.println();
+                     //Serial.println();      // commented out due to dumpUser always printing a line -WB 7-7-2011
                                              }
                  else{logprivFail();}
                   break;
