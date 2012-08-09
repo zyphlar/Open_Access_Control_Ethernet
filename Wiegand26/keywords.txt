@@ -1,0 +1,9 @@
+initReaderOne   KEYWORD2
+initReaderTwo	KEYWORD2
+reader1One	KEYWORD2
+reader1Zero	KEYWORD2
+reader2One	KEYWORD2
+reader2Zero	KEYWORD2
+initReaderThree	KEYWORD2
+reader3One	KEYWORD2
+reader3Zero 	KEYWORD2
