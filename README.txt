@@ -1,12 +1,22 @@
-/* Open Access Control for Hacker Spaces
- * Created by 23B Shop Hacker Space
+/* Open Access Control for Hacker Spaces - Ethernet Branch
+ * Branch last modified by HeatSync Labs
+ * https://github.com/zyphlar/Open_Access_Control_Ethernet
+ * by Will Bradley
+ * 
+ * Upstream created by 23B Shop Hacker Space
  * http://blog.shop.23b.org
  * by John Norman and Dan Lozano
- * Readme updated 4/3/2011
+ * Readme updated 8/8/2012
 */
 
-For the latest version of this software, visit:
+For the latest version of THIS BRANCH, visit:
+https://github.com/zyphlar/Open_Access_Control_Ethernet
+
+For the latest version of the UPSTREAM software, visit:
 http://code.google.com/p/open-access-control/
+
+Features in Ethernet branch v0.01: 
+-Extremely rudimentary logging via HTTP using Arduino Ethernet
 
 New features in v1.32:
 -Serial console password with bad attempts lockout
