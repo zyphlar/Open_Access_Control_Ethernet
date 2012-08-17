@@ -2,7 +2,11 @@
 #define	_PCATTACH_H_ 
 #endif
 
-#include <WProgram.h>
+#if defined(ARDUINO) && ARDUINO >= 100
+#include "Arduino.h"
+#else
+#include "WProgram.h"
+#endif
 #define uint_8 byte
 
 class PCATTACH {

@@ -9,7 +9,11 @@
 #define	_Wire_H_
 #endif
 
-#include <WProgram.h>        
+#if defined(ARDUINO) && ARDUINO >= 100
+#include "Arduino.h"
+#else
+#include "WProgram.h"
+#endif
 
 #define DS1307_I2C_ADDRESS 0x68
   
