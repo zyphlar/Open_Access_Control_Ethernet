@@ -45,8 +45,8 @@ byte DS1307::bcdToDec(byte val)
 void DS1307::stopDs1307()
 {
   Wire.beginTransmission(DS1307_I2C_ADDRESS);
-  Wire.send(0);
-  Wire.send(0x80);
+  Wire.write(0);
+  Wire.write(0x80);
   Wire.endTransmission();
 }
 */
@@ -65,15 +65,15 @@ void DS1307::setDateDs1307(byte second,        // 0-59
                    byte year)          // 0-99
 {
    Wire.beginTransmission(DS1307_I2C_ADDRESS);
-   Wire.send(0);
-   Wire.send(decToBcd(second));    // 0 to bit 7 starts the clock
-   Wire.send(decToBcd(minute));
-   Wire.send(decToBcd(hour));      // If you want 12 hour am/pm you need to set
+   Wire.write(0);
+   Wire.write(decToBcd(second));    // 0 to bit 7 starts the clock
+   Wire.write(decToBcd(minute));
+   Wire.write(decToBcd(hour));      // If you want 12 hour am/pm you need to set
                                    // bit 6 (also need to change readDateDs1307)
-   Wire.send(decToBcd(dayOfWeek));
-   Wire.send(decToBcd(dayOfMonth));
-   Wire.send(decToBcd(month));
-   Wire.send(decToBcd(year));
+   Wire.write(decToBcd(dayOfWeek));
+   Wire.write(decToBcd(dayOfMonth));
+   Wire.write(decToBcd(month));
+   Wire.write(decToBcd(year));
    Wire.endTransmission();
 }
 
@@ -88,19 +88,19 @@ void DS1307::getDateDs1307(byte *second,
 {
   // Reset the register pointer
   Wire.beginTransmission(DS1307_I2C_ADDRESS);
-  Wire.send(0);
+  Wire.write(0);
   Wire.endTransmission();
 
   Wire.requestFrom(DS1307_I2C_ADDRESS, 7);
 
   // A few of these need masks because certain bits are control bits
-  *second     = bcdToDec(Wire.receive() & 0x7f);
-  *minute     = bcdToDec(Wire.receive());
-  *hour       = bcdToDec(Wire.receive() & 0x3f);  // Need to change this if 12 hour am/pm
-  *dayOfWeek  = bcdToDec(Wire.receive());
-  *dayOfMonth = bcdToDec(Wire.receive());
-  *month      = bcdToDec(Wire.receive());
-  *year       = bcdToDec(Wire.receive());
+  *second     = bcdToDec(Wire.read() & 0x7f);
+  *minute     = bcdToDec(Wire.read());
+  *hour       = bcdToDec(Wire.read() & 0x3f);  // Need to change this if 12 hour am/pm
+  *dayOfWeek  = bcdToDec(Wire.read());
+  *dayOfMonth = bcdToDec(Wire.read());
+  *month      = bcdToDec(Wire.read());
+  *year       = bcdToDec(Wire.read());
 }
 
 /*
