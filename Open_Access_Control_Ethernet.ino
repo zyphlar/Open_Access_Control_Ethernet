@@ -180,6 +180,7 @@ PCATTACH pcattach;    // Software interrupt library
 const prog_uchar rebootMessage[]          PROGMEM  = {"AccessControlSystemRebooted"};
 
 const prog_uchar doorChimeMessage[]       PROGMEM  = {"FrontDoorOpened"};
+const prog_uchar doorsunlockedMessage[]   PROGMEM  = {"AllDoorsUnlocked"};
 const prog_uchar doorslockedMessage[]     PROGMEM  = {"AllDoorsRelocked"};
 const prog_uchar alarmtrainMessage[]      PROGMEM  = {"AlarmTrainingPerformed."};
 const prog_uchar privsdeniedMessage[]     PROGMEM  = {"AccessDeniedPrivelegedModeIsNotEnabled"};
@@ -285,30 +286,73 @@ void loop()                                     // Main branch, runs over and ov
         if (c == '\n' && currentLineIsBlank) {
           // send a standard http response header
           client.println("HTTP/1.1 200 OK");
-          client.println("Content-Type: text/html");
+          client.println("Cache-Control: no-store\r\nContent-Type: text/html");
           client.println();
           
-          if(readString.indexOf('?') > 0) {
-            client.println("hello!");
+          if(readString.indexOf("?hi") > 0) {
+            client.println("hi");
+          }
+          if(readString.indexOf("?s") > 0) {
+            int offset = readString.indexOf("?s");
+            char usernum[3] = {readString[offset+2],readString[offset+3],readString[offset+4]};
+            
+            client.print("m");
+            client.println(usernum);
+          }
+          /*
+          if(readString.indexOf("?m") > 0) {
+            client.println("m"); // modify user <num>  <usermask> <tagnumber>
+          }
+          if(readString.indexOf("?a") > 0) {
+            client.println("a"); // all users
+          }
+          if(readString.indexOf("?r") > 0) {
+            client.println("r"); // remove user <num>
+          }
+          if(readString.indexOf("?o") > 0) {
+            client.println("o"); // open <door#>
+          }
+          */
+          if(readString.indexOf("?u") > 0) {
+            unlockall();
+            client.println("u");
+          }
+          if(readString.indexOf("?l") > 0) {
+            lockall();
+            chirpAlarm(1);   
+            client.println("l");
+          }
+          /*
+          if(readString.indexOf("?1") > 0) {
+            client.println("1"); // disarm
+          }
+          if(readString.indexOf("?2") > 0) {
+            client.println("2"); // arm
+          }
+          if(readString.indexOf("?3") > 0) {
+            client.println("3"); // train
+          }
+          */
+          if(readString.indexOf("?9") > 0) {
+            client.println("<pre>");
+            client.print("Alarm armed:");
+            client.println(alarmArmed,DEC);
+            client.print("Alarm activated:");
+            client.println(alarmActivated,DEC);
+            client.print("Alarm 3:");
+            client.println(pollAlarm(3),DEC);
+            client.print("Alarm 2:");
+            client.println(pollAlarm(2),DEC);                  
+            client.print("Door 1 locked:");
+            client.println(door1Locked);                    
+            client.print("Door 2 locked:");
+            client.println(door2Locked); 
+            client.println("</pre>");
+          }
+          if(readString.indexOf("?e") > 0) {
+            client.println("e");
           }
 
-          // output status
-          client.println("<pre>");
-          client.print("Alarm armed:");
-          client.println(alarmArmed,DEC);
-          client.print("Alarm activated:");
-          client.println(alarmActivated,DEC);
-          client.print("Alarm 3:");
-          client.println(pollAlarm(3),DEC);
-          client.print("Alarm 2:");
-          client.println(pollAlarm(2),DEC);                  
-          client.print("Door 1 locked:");
-          client.println(door1Locked);                    
-          client.print("Door 2 locked:");
-          client.println(door2Locked); 
-          client.println("</pre>");
-          client.println("<a href=");
-          
           break;
         }
         if (c == '\n') {
@@ -981,6 +1025,16 @@ byte dp=1;
   Serial.println(" locked");
 
 }
+void unlockall() {
+  doorUnlock(1);
+  doorUnlock(2);
+  alarmState(0);                                    
+  armAlarm(4);
+  door1Locked=false;
+  door2Locked=false;
+  chirpAlarm(3);    
+  PROGMEMprintln(doorsunlockedMessage);
+}
 void lockall() {                      //Lock down all doors. Can also be run periodically to safeguard system.
 
   digitalWrite(DOORPIN1, LOW);
@@ -1525,17 +1579,10 @@ if(inCount==0) {
 
                   case 'u': {
                     if(privmodeEnabled==true) {
-                      alarmState(0);                                       // Set to door chime only/open doors                                                                       
-                      armAlarm(4);
-                      doorUnlock(1);
-                      doorUnlock(2);
-                      door1Locked=false;
-                      door2Locked=false;
-                      chirpAlarm(3);   
-                                               }
-                                               
-                   else{logprivFail();}
-                   break;  
+                      unlockall();
+                    }                          
+                    else{logprivFail();}
+                    break;  
                             }
                   case 'l': {                                             // Lock all doors          
                    lockall();
