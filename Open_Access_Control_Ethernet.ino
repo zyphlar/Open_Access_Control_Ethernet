@@ -292,14 +292,13 @@ void loop()                                     // Main branch, runs over and ov
           if(readString.indexOf("?hi") > 0) {
             client.println("hi");
           }
-          if(readString.indexOf("?s") > 0) {
+          if(readString.indexOf("?s") > 0) { // list user
             int offset = readString.indexOf("?s");
-            char usernum[3] = {readString[offset+2],readString[offset+3],readString[offset+4]};
+            char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
-            client.print("m");
+            client.print("s");
             client.println(usernum);
           }
-          /*
           if(readString.indexOf("?m") > 0) {
             client.println("m"); // modify user <num>  <usermask> <tagnumber>
           }
@@ -312,7 +311,6 @@ void loop()                                     // Main branch, runs over and ov
           if(readString.indexOf("?o") > 0) {
             client.println("o"); // open <door#>
           }
-          */
           if(readString.indexOf("?u") > 0) {
             unlockall();
             client.println("u");
@@ -350,7 +348,9 @@ void loop()                                     // Main branch, runs over and ov
             client.println("</pre>");
           }
           if(readString.indexOf("?e") > 0) {
-            client.println("e");
+            char pass[5] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],'\0'};
+
+            login(strtoul(pass,NULL,16));
           }
 
           break;
@@ -1443,6 +1443,45 @@ void dumpUser(byte usernum)                                            // Return
   else Serial.println("Bad user number!");
 }
 
+void login(long input) {
+  logDate();
+  if((consoleFail>=5) && (millis()-consolefailTimer<300000))  // Do not allow priv mode if more than 5 failed logins in 5 minute
+  {  
+    PROGMEMprintln(privsAttemptsMessage);
+  }
+  else {
+    if (input == PRIVPASSWORD)
+    {
+      consoleFail=0; 
+      PROGMEMprintln(privsenabledMessage);
+      privmodeEnabled=true;
+    }
+    else {
+      PROGMEMprintln(privsdisabledMessage);
+      privmodeEnabled=false;    
+      if(consoleFail==0) {                // Set the timeout for failed logins
+        consolefailTimer=millis();
+      }
+      consoleFail++;                 // Increment the login failure counter
+    } 
+  }
+}
+
+void showUser(char* input) {
+  
+  if(privmodeEnabled==true) {
+    Serial.print("UserNum:");
+    Serial.print(" ");
+    Serial.print("Usermask:");
+    Serial.print(" ");
+    Serial.println("TagNum:");
+    dumpUser(atoi(input));
+    //Serial.println();      // commented out due to dumpUser always printing a line -WB 7-7-2011 
+  }
+  else{logprivFail();}
+
+}
+
 
 /* Displays a serial terminal menu system for
  * user management and other tasks
@@ -1494,29 +1533,8 @@ if(inCount==0) {
 
 
                  case 'e': {                                                 // Enable "privileged" commands at console
-                   logDate();
-
-                     if((consoleFail>=5) && (millis()-consolefailTimer<300000))  // Do not allow priv mode if more than 5 failed logins in 5 minute
-                       {  
-                         PROGMEMprintln(privsAttemptsMessage);
-                         break;
-                       }
-                        if (strtoul(cmdString[1],NULL,16) == PRIVPASSWORD)
-                         {
-                         consoleFail=0;                    
-                         PROGMEMprintln(privsenabledMessage);
-                         privmodeEnabled=true;
-                         }
-                        else {
-                          PROGMEMprintln(privsdisabledMessage);
-                          privmodeEnabled=false;                                          
-                           if(consoleFail==0) {                                   // Set the timeout for failed logins
-                             consolefailTimer=millis();
-                                              }
-                              consoleFail++;                                    // Increment the login failure counter
-                                            }
-                      
-                   break;
+                  login(strtoul(cmdString[1],NULL,16));
+                break;    
                 
                             }
                 
@@ -1542,18 +1560,9 @@ if(inCount==0) {
                   break;
                            }
 
-                 case 's': {                                                 // List user 
-                  if(privmodeEnabled==true) {
-                     Serial.print("UserNum:");
-                     Serial.print(" ");
-                     Serial.print("Usermask:");
-                     Serial.print(" ");
-                     Serial.println("TagNum:");
-                     dumpUser(atoi(cmdString[1]));
-                     //Serial.println();      // commented out due to dumpUser always printing a line -WB 7-7-2011
-                                             }
-                 else{logprivFail();}
-                  break;
+                 case 's': {                     // List user 
+                   showUser(cmdString[1]);
+                   break;
                            }
  
                   case 'd': {                                                 // Display current time
