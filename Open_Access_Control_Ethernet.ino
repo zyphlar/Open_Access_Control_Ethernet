@@ -153,8 +153,8 @@ unsigned long keypadValue=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
 
 // Log buffer
-char logKeys[20]={0};
-int logData[20]={0};
+char logKeys[40]={0};
+int logData[40]={0};
 int logCursor=0;
 
 
@@ -180,12 +180,16 @@ PCATTACH pcattach;    // Software interrupt library
 */
 
 
-const prog_uchar httpheaderok[]          PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
-const prog_uchar httpheadernoauth[]          PROGMEM  = {"HTTP/1.1 403 Forbidden\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n<a href='/'>Not logged in.</a>"};
-//const prog_uchar httpheaderbadquery[]          PROGMEM  = {"HTTP/1.1 400 Bad Request\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
-const prog_uchar title[]          PROGMEM  = {"<h2>HSL OAC</h2>"};
-//const prog_uchar help[]          PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable\n?s000 - show user\n?m000&p000&t00000000 - modify user permission tag\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u - unlock all\n?l - lock all?1 - arm\n?2 - disarm\n?3 - train\n?9 - status</pre>"};
-const prog_uchar help[]          PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable\n</pre>"};
+const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
+const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
+const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable privileged commands (enter wrong code to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) permission(0-255) tag(00000000-ffffffff)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status</pre>"};
+const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
+const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all doors."};
+const prog_uchar unlock1[]        PROGMEM  = {"Unlocked door 1."};
+const prog_uchar unlock2[]        PROGMEM  = {"Unlocked door 2."};
+const prog_uchar open1[]          PROGMEM  = {"Opened door 1 for a few seconds."};
+const prog_uchar open2[]          PROGMEM  = {"Opened door 2 for a few seconds."};
+const prog_uchar lockboth[]       PROGMEM  = {"Locked all doors."};
 
 void setup(){           // Runs once at Arduino boot-up
 
@@ -265,17 +269,13 @@ void loop()                                     // Main branch, runs over and ov
         // character) and the line is blank, the http request has ended,
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {
+          PROGMEMprintln(client,httpheaderok);
           
-          if(readString.indexOf("?hi") > 0) {
-            PROGMEMprintln(client,httpheaderok);
-            client.println("hi");
-          }
           if(readString.indexOf("?s") > 0) { // show user
             int offset = readString.indexOf("?s");
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               client.println("<pre>");
               client.print("UserNum:");
               client.print(" ");
@@ -286,7 +286,7 @@ void loop()                                     // Main branch, runs over and ov
               client.println("</pre>");
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
@@ -304,7 +304,6 @@ void loop()                                     // Main branch, runs over and ov
             
             if(offset-initialoffset == 10){
               if(privmodeEnabled==true) {
-                PROGMEMprintln(client,httpheaderok);
                 client.println("<pre>");
                 client.println("prev:");
                 dumpUser(client, atoi(usernum));
@@ -314,18 +313,16 @@ void loop()                                     // Main branch, runs over and ov
                 client.println("</pre>");
               }
               else{
-                PROGMEMprintln(client,httpheadernoauth);
+                PROGMEMprintln(client,noauth);
                 logprivFail();
               } 
             }
             else {
-              PROGMEMprintln(client,httpheaderok);
               client.println("err:badquery");
             }
           }
           if(readString.indexOf("?a") > 0) {  //list all users
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               logDate();
               client.println("<pre>");
               client.print("UserNum:");
@@ -339,7 +336,7 @@ void loop()                                     // Main branch, runs over and ov
               client.println("</pre>");
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
@@ -348,7 +345,6 @@ void loop()                                     // Main branch, runs over and ov
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               client.println("r");           
               client.println("<pre>");
               client.println("prev:");
@@ -358,7 +354,7 @@ void loop()                                     // Main branch, runs over and ov
               dumpUser(client,atoi(usernum));
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
@@ -368,117 +364,143 @@ void loop()                                     // Main branch, runs over and ov
   
             if(privmodeEnabled==true) {
               if(atoi(doornum) == 1){  
-                PROGMEMprintln(client,httpheaderok);
                 alarmState(0);                                       // Set to door chime only/open doors                                                                       
                 armAlarm(4);
                 doorUnlock(1);                                       // Open the door specified
                 door1locktimer=millis();
-                client.println("o1");
+                PROGMEMprintln(client,open1);
               }                    
               else{
                 if(atoi(doornum) == 2){  
-                  PROGMEMprintln(client,httpheaderok);
                   alarmState(0);                                       // Set to door chime only/open doors                                                                       
                   armAlarm(4);
                   doorUnlock(2);                                        
                   door2locktimer=millis();
-                  client.println("o2");
+                  PROGMEMprintln(client,open2);
                 }
                 else {
-                  PROGMEMprintln(client,httpheaderok);
                   client.println("err:baddoor#");
                 }
               }
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
-          if(readString.indexOf("?u") > 0) {  //unlock
+          if(readString.indexOf("?u") > 0) {  //unlock (?u or ?u=1 or ?u=2)
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
-              unlockall();
+              int offset = readString.indexOf("?u="); // see if we're unlocking a specific door
+              if(offset > 0) {
+                char doornum[2] = {readString[offset+3],'\0'};
+                if(atoi(doornum) == 1){ 
+                  doorUnlock(1);
+                  alarmState(0);
+                  armAlarm(4);
+                  door1Locked=false;
+                  chirpAlarm(3);
+                  PROGMEMprintln(client,unlock1);
+                }
+                else {
+                  if(atoi(doornum) == 2){ 
+                    doorUnlock(2);
+                    alarmState(0);
+                    armAlarm(4);
+                    door2Locked=false;
+                    chirpAlarm(3);          
+                    PROGMEMprintln(client,unlock2);
+                  }
+                  else {
+                    client.println("err:baddoor#");
+                  }
+                }
+              }
+              else {  // not unlocking a specific door; unlock all.
+                PROGMEMprintln(client,unlockboth);
+                unlockall();
+              }
               printStatus(client);
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
           if(readString.indexOf("?l") > 0) {  //lock
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               lockall();
-              chirpAlarm(1);   
+              chirpAlarm(1); 
+              PROGMEMprintln(client,lockboth);  
               printStatus(client);
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
           if(readString.indexOf("?1") > 0) {  // disarm
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               armAlarm(0);
               alarmState(0);
               chirpAlarm(1);  
               printStatus(client);
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
           if(readString.indexOf("?2") > 0) { // arm
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               chirpAlarm(20);        // 200 chirps = ~30 seconds delay
               armAlarm(1);                           
               printStatus(client);
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
           if(readString.indexOf("?3") > 0) { // train
             if(privmodeEnabled==true) {
-              PROGMEMprintln(client,httpheaderok);
               trainAlarm();
               printStatus(client);
             }
             else{
-              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
           if(readString.indexOf("?9") > 0) { // status
-            PROGMEMprintln(client,httpheaderok);
             PROGMEMprintln(client,title);
             printStatus(client);
             PROGMEMprintln(client,help);
+          }
+          if(readString.indexOf("?z") > 0) { // log
+            if(privmodeEnabled==true) {
+              printLog(client);
+            }
+            else{
+              PROGMEMprintln(client,noauth);
+              logprivFail();
+            }
           }
           if(readString.indexOf("?e=") > 0) {
             int offset = readString.indexOf("?e=");
             char pass[5] = {readString[offset+3],readString[offset+4],readString[offset+5],readString[offset+6],'\0'};
 
             if(login(strtoul(pass,NULL,16))) {
-              PROGMEMprintln(client,httpheaderok);
               PROGMEMprintln(client,title);
               client.println("authok");  
               PROGMEMprintln(client,help);
             }
             else {
-              PROGMEMprintln(client,httpheadernoauth);
               PROGMEMprintln(client,title);
               client.println("authfail");
               PROGMEMprintln(client,help);
             }
           }
-          if(readString.indexOf("?") < 1) {
-            PROGMEMprintln(client,httpheaderok);
+          if(readString.indexOf("?") < 0) {
             PROGMEMprintln(client,title);
             PROGMEMprintln(client,help);
           }
@@ -541,7 +563,7 @@ void loop()                                     // Main branch, runs over and ov
   if(hour==23 && minute==59 && door1Locked==false){
          doorLock(1);
          door1Locked==true;      
-         addToLog('L',2);
+         addToLog('L',3);
   }
 
 
@@ -592,7 +614,7 @@ void loop()                                     // Main branch, runs over and ov
 
    case 255:                                              // Locked out user     
     {
-     addToLog('F',userMask1);
+     addToLog('f',userMask1);
      break;
     }
    
@@ -669,7 +691,7 @@ void loop()                                     // Main branch, runs over and ov
   
    case 255:                                               // Locked out      
     {
-     addToLog('F',userMask2);
+     addToLog('f',userMask2);
      break;
     }
     
@@ -1118,18 +1140,18 @@ byte dp=1;
    else(dp=DOORPIN2);
   
   digitalWrite(dp, HIGH);
-  //addToLog('U',input);
+  addToLog('U',input);
 
 }
 
-void doorLock(int input) {          //Send an unlock signal to the door and flash the Door LED
+void doorLock(int input) {          //Send a lock signal to the door and flash the Door LED
 byte dp=1;
   if(input == 1) {
     dp=DOORPIN1; }
    else(dp=DOORPIN2);
 
   digitalWrite(dp, LOW);
-  //addToLog('L',input);
+  addToLog('L',input);
 
 }
 void unlockall() {
@@ -1144,9 +1166,8 @@ void unlockall() {
   //PROGMEMprintln(doorsunlockedMessage);
 }
 void lockall() {                      //Lock down all doors. Can also be run periodically to safeguard system.
-
-  digitalWrite(DOORPIN1, LOW);
-  digitalWrite(DOORPIN2,LOW);
+  doorLock(1);
+  doorLock(2);
   door1Locked=true;
   door2Locked=true;
   //PROGMEMprintln(doorslockedMessage);
@@ -1159,6 +1180,7 @@ void logDate()
   ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
   addToLog('H',hour);
   addToLog('M',minute);
+  addToLog('E',second);
 }
 
 void logReboot() {                                  //Log system startup
@@ -1196,7 +1218,7 @@ void logkeypadCommand(byte reader, long command){
 
 void logalarmSensor(byte zone) {     //Log Alarm zone events
   logDate();
-  addToLog('S',zone); 
+  addToLog('s',zone); 
 }
 
 void logalarmTriggered() {
@@ -1210,8 +1232,8 @@ void logunLock(long user, byte door) {        //Log unlock events
 }
 
 void logalarmState(byte level) {        //Log unlock events
-  logDate();
-  addToLog('M',level);
+  //logDate();
+  addToLog('m',level);
 }
 
 void logalarmArmed(byte level) {        //Log unlock events
@@ -1314,7 +1336,7 @@ void addUser(int userNum, byte userMask, unsigned long tagNumber)       // Modif
       EEPROM.write((offset+i), (EEPROM_buffer[i])); // Store the resulting value in 5 bytes of EEPROM.
     }
 
-    addToLog('M',userNum);
+    addToLog('a',userNum);
 
   }
 }
@@ -1366,7 +1388,7 @@ int checkUser(unsigned long tagNumber)                                  // Check
 
 
     if((EEPROM_buffer == tagNumber) && (tagNumber !=0xFFFFFFFF) && (tagNumber !=0x0)) {    // Return a not found on blank (0xFFFFFFFF) entries 
-      addToLog('C',((i-EEPROM_FIRSTUSER)/5));
+      addToLog('c',((i-EEPROM_FIRSTUSER)/5));
       found = EEPROM.read(i+4);
       return found;
     }                             
@@ -1466,14 +1488,19 @@ void addToLog(char type, int data) {
   logData[logCursor] = data;
   
   logCursor += 1;
-  if(logCursor > 20) {
+  if(logCursor > sizeof(logKeys)) {
     logCursor = 0;
   }
 }
 
-void readFromLog(int index, char &type, int &data) {
-  logKeys[index] = type;
-  logData[index] = data;
+void printLog(EthernetClient client) {
+  client.println("<pre>");
+  for(int i=0;i<sizeof(logKeys);i++) {
+    client.print(logKeys[i]);
+    client.print(": ");
+    client.println(logData[i]);
+  }
+  client.println("</pre>");
 }
 
 
