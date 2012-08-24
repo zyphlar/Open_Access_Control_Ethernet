@@ -343,7 +343,7 @@ void loop()                                     // Main branch, runs over and ov
               } 
             }
             else {
-              client.println("err:badquery");
+              client.println("err:query");
             }
           }
           if(readString.indexOf("?a") > 0) {  //list all users
@@ -404,7 +404,7 @@ void loop()                                     // Main branch, runs over and ov
                   PROGMEMprintln(client,open2);
                 }
                 else {
-                  client.println("err:baddoor#");
+                  client.println("err:door#");
                 }
               }
             }
@@ -436,7 +436,7 @@ void loop()                                     // Main branch, runs over and ov
                     PROGMEMprintln(client,unlock2);
                   }
                   else {
-                    client.println("err:baddoor#");
+                    client.println("err:door#");
                   }
                 }
               }
@@ -514,10 +514,11 @@ void loop()                                     // Main branch, runs over and ov
                 logKeys[i] = 0;
                 logData[i] = 0;
               }
+              logCursor = 0;
               addToLog('z',0);
               logDate();
               
-              client.println("clrd");
+              client.println("y");
             }
             else{
               PROGMEMprintln(client,noauth);
