@@ -207,7 +207,7 @@ PCATTACH pcattach;    // Software interrupt library
 
 const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
 const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable privileged commands (enter wrong code to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) permission(0-255) tag(00000000-ffffffff)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status</pre>"};
+const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be padded.\n\n?e=0000 - enable privileged (enter 0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) permission(0-255) tag(00000000-ffffffff)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
 const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
 const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all doors."};
 const prog_uchar unlock1[]        PROGMEM  = {"Unlocked door 1."};
@@ -497,9 +497,7 @@ void loop()                                     // Main branch, runs over and ov
             }
           }
           if(readString.indexOf("?9") > 0) { // status
-            PROGMEMprintln(client,title);
             printStatus(client);
-            PROGMEMprintln(client,help);
           }
           if(readString.indexOf("?z") > 0) { // log
             if(privmodeEnabled==true) {
@@ -512,13 +510,63 @@ void loop()                                     // Main branch, runs over and ov
           }
           if(readString.indexOf("?y") > 0) { // clear log
             if(privmodeEnabled==true) {
-              clearLog(client);
+              for(int i=0;i<sizeof(logKeys);i++) {
+                logKeys[i] = 0;
+                logData[i] = 0;
+              }
+              addToLog('z',0);
+              logDate();
+              
+              client.println("clrd");
             }
             else{
               PROGMEMprintln(client,noauth);
               logprivFail();
             }
           }
+          /*
+          if(readString.indexOf("?d=") > 0) { // modify date (?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - day-dayofweek-month-year-hour-min-sec)
+            int offset = readString.indexOf("?d=");  // date, 3 chars
+            int initialoffset = offset; // save for comparison
+            
+            char day2[3] = {readString[offset+3],readString[offset+4],'\0'};
+
+            offset = readString.indexOf("&w="); // week, 1 char
+            char dayofweek2[2] = {readString[offset+3],'\0'};
+
+            offset = readString.indexOf("&m="); // month, 2 char
+            char month2[3] = {readString[offset+3],readString[offset+4],'\0'};
+            
+            offset = readString.indexOf("&y="); // year, 2 char
+            char year2[3] = {readString[offset+3],readString[offset+4],'\0'};
+            
+            offset = readString.indexOf("&h="); // hour, 2 char
+            char hour2[3] = {readString[offset+3],readString[offset+4],'\0'};
+            
+            offset = readString.indexOf("&i="); // minute, 2 char
+            char minute2[3] = {readString[offset+3],readString[offset+4],'\0'};
+            
+            offset = readString.indexOf("&s="); // second, 2 char
+            char second2[3] = {readString[offset+3],readString[offset+4],'\0'};
+
+            
+            if(offset-initialoffset == 10){
+              if(privmodeEnabled==true) {
+                
+                //update date
+                ds1307.setDateDs1307(atoi(second2),atoi(minute2),atoi(hour2),atoi(dayofweek2),atoi(day2),atoi(month2),atoi(year2));
+                
+              }
+              else{
+                PROGMEMprintln(client,noauth);
+                logprivFail();
+              } 
+            }
+            else {
+              client.println("err:badquery");
+            }
+            
+          }*/
           if(readString.indexOf("?e=") > 0) {
             int offset = readString.indexOf("?e=");
             char pass[5] = {readString[offset+3],readString[offset+4],readString[offset+5],readString[offset+6],'\0'};
@@ -1217,6 +1265,7 @@ void logDate()
   addToLog('E',second);
 }
 
+
 void logReboot() {                                  //Log system startup
   logDate();
     //PROGMEMprintln(rebootMessage);
@@ -1279,15 +1328,15 @@ void logprivFail() {
   addToLog('F',2);
 }
 
-
+/*
 void hardwareTest(long iterations)
 {
 
-  /* Hardware testing routing. Performs a read of all digital inputs and
-   * a write to each relay output. Also reads the analog value of each
-   * alarm pin. Use for testing hardware. Wiegand26 readers should read 
-   * "HIGH" or "1" when connected.
-   */
+  // Hardware testing routing. Performs a read of all digital inputs and
+  // a write to each relay output. Also reads the analog value of each
+  // alarm pin. Use for testing hardware. Wiegand26 readers should read 
+  // "HIGH" or "1" when connected.
+  
 
   pinMode(2,INPUT);
   pinMode(3,INPUT);
@@ -1301,7 +1350,7 @@ void hardwareTest(long iterations)
 
   for(long counter=1; counter<=iterations; counter++) {                                  // Do this number of times specified
     logDate();
-    /*
+    
     Serial.print("\n"); 
     Serial.println("Pass: "); 
     Serial.println(counter); 
@@ -1321,7 +1370,7 @@ void hardwareTest(long iterations)
     Serial.println(analogRead(2));
     Serial.print("Input A3:");
     Serial.println(analogRead(3));
-    */
+    
     delay(5000);
 
     digitalWrite(6,HIGH);                         // Relay exercise routine
@@ -1338,6 +1387,7 @@ void hardwareTest(long iterations)
 
   }
 }
+*/
 
 void clearUsers()    //Erases all users from EEPROM
 {
@@ -1537,16 +1587,6 @@ void printLog(EthernetClient client) {
   client.println("</pre>");
 }
 
-void clearLog(EthernetClient client) {
-  for(int i=0;i<sizeof(logKeys);i++) {
-    logKeys[i] = 0;
-    logData[i] = 0;
-  }
-  addToLog('z',0);
-  logDate();
-  
-  client.println("cleared log");
-}
 
 void PROGMEMprintln(EthernetClient client, const prog_uchar str[])    // Function to retrieve strings from program memory
 {
