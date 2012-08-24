@@ -150,10 +150,12 @@ unsigned long keypadTime = 0;                                  // Timeout counte
 unsigned long keypadValue=0;
 
 
-// Serial terminal buffer (needs to be global)
-char inString[40]={0};                                         // Size of command buffer (<=128 for Arduino)
-byte inCount=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
+
+// Log buffer
+char logKeys[20]={0};
+int logData[20]={0};
+int logCursor=0;
 
 
 // Enter a MAC address and IP address for your controller below.
@@ -177,34 +179,13 @@ PCATTACH pcattach;    // Software interrupt library
  * RAM for something else.
 */
 
-const prog_uchar rebootMessage[]          PROGMEM  = {"AccessControlSystemRebooted"};
 
-const prog_uchar doorChimeMessage[]       PROGMEM  = {"FrontDoorOpened"};
-const prog_uchar doorsunlockedMessage[]   PROGMEM  = {"AllDoorsUnlocked"};
-const prog_uchar doorslockedMessage[]     PROGMEM  = {"AllDoorsRelocked"};
-const prog_uchar alarmtrainMessage[]      PROGMEM  = {"AlarmTrainingPerformed."};
-const prog_uchar privsdeniedMessage[]     PROGMEM  = {"AccessDeniedPrivelegedModeIsNotEnabled"};
-const prog_uchar privsenabledMessage[]    PROGMEM  = {"PrivelegedModeEnabled"};
-const prog_uchar privsdisabledMessage[]   PROGMEM  = {"PrivelegedModeDisabled"};
-const prog_uchar privsAttemptsMessage[]   PROGMEM  = {"TooManyFailedAttemptsTryAgainLater"};
-
-const prog_uchar consolehelpMessage1[]    PROGMEM  = {"ValidCommandsAre"};
-const prog_uchar consolehelpMessage2[]    PROGMEM  = {"Date-ShowUser-ModifyUser_num_usermask_tagnumber"};
-const prog_uchar consolehelpMessage3[]    PROGMEM  = {"AllUserDump-RemoveUser_num-OpenDoor_num"};
-const prog_uchar consolehelpMessage4[]    PROGMEM  = {"UnlockAllDoors-LockAllDoors"};
-const prog_uchar consolehelpMessage5[]    PROGMEM  = {"1_DisarmAlarm-2_ArmAlarm-3_TrainAlarm-9_ShowStatus"};
-const prog_uchar consolehelpMessage6[]    PROGMEM  = {"Enable_password"};                                       
-const prog_uchar consoledefaultMessage[]  PROGMEM  = {"InvalidCommandPressQuestionMarkForHelp"};
-
-const prog_uchar statusMessage1[]         PROGMEM  = {"AlarmArmedState_1_Armed"};
-const prog_uchar statusMessage2[]         PROGMEM  = {"AlarmSirenState_1_Activated"};
-const prog_uchar statusMessage3[]         PROGMEM  = {"FrontDoorOpenState_0_Closed"};
-const prog_uchar statusMessage4[]         PROGMEM  = {"RearUpDoorOpenState_0_Closed"};     
-const prog_uchar statusMessage5[]         PROGMEM  = {"Door1UnlockedState_1_Locked"};                   
-const prog_uchar statusMessage6[]         PROGMEM  = {"Door2UnlockedState_1_Locked"}; 
-
-
-
+const prog_uchar httpheaderok[]          PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
+const prog_uchar httpheadernoauth[]          PROGMEM  = {"HTTP/1.1 403 Forbidden\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n<a href='/'>Not logged in.</a>"};
+//const prog_uchar httpheaderbadquery[]          PROGMEM  = {"HTTP/1.1 400 Bad Request\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
+const prog_uchar title[]          PROGMEM  = {"<h2>HSL OAC</h2>"};
+//const prog_uchar help[]          PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable\n?s000 - show user\n?m000&p000&t00000000 - modify user permission tag\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u - unlock all\n?l - lock all?1 - arm\n?2 - disarm\n?3 - train\n?9 - status</pre>"};
+const prog_uchar help[]          PROGMEM  = {"<hr/><pre>Numbers must be zero-padded.\n\n?e=0000 - enable\n</pre>"};
 
 void setup(){           // Runs once at Arduino boot-up
 
@@ -248,7 +229,7 @@ void setup(){           // Runs once at Arduino boot-up
 
 
 
-  Serial.begin(57600);	               	       // Set up Serial output at 8,N,1,57600bps
+//  Serial.begin(57600);	               	       // Set up Serial output at 8,N,1,57600bps
   
   
   logReboot();
@@ -284,80 +265,222 @@ void loop()                                     // Main branch, runs over and ov
         // character) and the line is blank, the http request has ended,
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {
-          // send a standard http response header
-          client.println("HTTP/1.1 200 OK");
-          client.println("Cache-Control: no-store\r\nContent-Type: text/html");
-          client.println();
           
           if(readString.indexOf("?hi") > 0) {
+            PROGMEMprintln(client,httpheaderok);
             client.println("hi");
           }
-          if(readString.indexOf("?s") > 0) { // list user
+          if(readString.indexOf("?s") > 0) { // show user
             int offset = readString.indexOf("?s");
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
-            client.print("s");
-            client.println(usernum);
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              client.println("<pre>");
+              client.print("UserNum:");
+              client.print(" ");
+              client.print("Usermask:");
+              client.print(" ");
+              client.println("TagNum:");
+              dumpUser(client, atoi(usernum));
+              client.println("</pre>");
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
           }
-          if(readString.indexOf("?m") > 0) {
-            client.println("m"); // modify user <num>  <usermask> <tagnumber>
-          }
-          if(readString.indexOf("?a") > 0) {
-            client.println("a"); // all users
-          }
-          if(readString.indexOf("?r") > 0) {
-            client.println("r"); // remove user <num>
-          }
-          if(readString.indexOf("?o") > 0) {
-            client.println("o"); // open <door#>
-          }
-          if(readString.indexOf("?u") > 0) {
-            unlockall();
-            client.println("u");
-          }
-          if(readString.indexOf("?l") > 0) {
-            lockall();
-            chirpAlarm(1);   
-            client.println("l");
-          }
-          /*
-          if(readString.indexOf("?1") > 0) {
-            client.println("1"); // disarm
-          }
-          if(readString.indexOf("?2") > 0) {
-            client.println("2"); // arm
-          }
-          if(readString.indexOf("?3") > 0) {
-            client.println("3"); // train
-          }
-          */
-          if(readString.indexOf("?9") > 0) {
-            client.println("<pre>");
-            client.print("Alarm armed:");
-            client.println(alarmArmed,DEC);
-            client.print("Alarm activated:");
-            client.println(alarmActivated,DEC);
-            client.print("Alarm 3:");
-            client.println(pollAlarm(3),DEC);
-            client.print("Alarm 2:");
-            client.println(pollAlarm(2),DEC);                  
-            client.print("Door 1 locked:");
-            client.println(door1Locked);                    
-            client.print("Door 2 locked:");
-            client.println(door2Locked); 
-            client.println("</pre>");
-          }
-          if(readString.indexOf("?e") > 0) {
-            int offset = readString.indexOf("?e");
-            char pass[5] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],'\0'};
+          if(readString.indexOf("?m") > 0) { // modify user #, permission #, tag # (?m000&p000&t00000000 must be zero-padded)
+            int offset = readString.indexOf("?m");  // user, 3 chars
+            int initialoffset = offset; // save for comparison
+            char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
 
-            login(strtoul(pass,NULL,16));
-            if(privmodeEnabled) {
-              client.println("ok");
+            offset = readString.indexOf("&p");  // permissions mask, 3 chars
+            char usermask[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
+
+            offset = readString.indexOf("&t");  // tag, 8 chars
+            char usertag[9] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],
+                               readString[offset+6],readString[offset+7],readString[offset+8],readString[offset+9],'\0'};
+            
+            if(offset-initialoffset == 10){
+              if(privmodeEnabled==true) {
+                PROGMEMprintln(client,httpheaderok);
+                client.println("<pre>");
+                client.println("prev:");
+                dumpUser(client, atoi(usernum));
+                addUser(atoi(usernum), atoi(usermask), strtoul(usertag,NULL,16));
+                client.println("cur:");
+                dumpUser(client, atoi(usernum));
+                client.println("</pre>");
+              }
+              else{
+                PROGMEMprintln(client,httpheadernoauth);
+                logprivFail();
+              } 
             }
             else {
-              client.println("fail");
+              PROGMEMprintln(client,httpheaderok);
+              client.println("err:badquery");
             }
+          }
+          if(readString.indexOf("?a") > 0) {  //list all users
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              logDate();
+              client.println("<pre>");
+              client.print("UserNum:");
+              client.print(" ");
+              client.print("Usermask:");
+              client.print(" ");
+              client.println("TagNum:");
+              for(int i=0; i<(NUMUSERS); i++){
+                dumpUser(client,i);
+              }
+              client.println("</pre>");
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?r") > 0) {  //remove user (?r000)
+            int offset = readString.indexOf("?r");
+            char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
+            
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              client.println("r");           
+              client.println("<pre>");
+              client.println("prev:");
+              dumpUser(client,atoi(usernum));
+              deleteUser(atoi(usernum));
+              client.println("cur:");
+              dumpUser(client,atoi(usernum));
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?o") > 0) {  // open door ?o1 or ?o2
+            int offset = readString.indexOf("?o");
+            char doornum[2] = {readString[offset+2],'\0'};
+  
+            if(privmodeEnabled==true) {
+              if(atoi(doornum) == 1){  
+                PROGMEMprintln(client,httpheaderok);
+                alarmState(0);                                       // Set to door chime only/open doors                                                                       
+                armAlarm(4);
+                doorUnlock(1);                                       // Open the door specified
+                door1locktimer=millis();
+                client.println("o1");
+              }                    
+              else{
+                if(atoi(doornum) == 2){  
+                  PROGMEMprintln(client,httpheaderok);
+                  alarmState(0);                                       // Set to door chime only/open doors                                                                       
+                  armAlarm(4);
+                  doorUnlock(2);                                        
+                  door2locktimer=millis();
+                  client.println("o2");
+                }
+                else {
+                  PROGMEMprintln(client,httpheaderok);
+                  client.println("err:baddoor#");
+                }
+              }
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?u") > 0) {  //unlock
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              unlockall();
+              printStatus(client);
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?l") > 0) {  //lock
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              lockall();
+              chirpAlarm(1);   
+              printStatus(client);
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?1") > 0) {  // disarm
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              armAlarm(0);
+              alarmState(0);
+              chirpAlarm(1);  
+              printStatus(client);
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?2") > 0) { // arm
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              chirpAlarm(20);        // 200 chirps = ~30 seconds delay
+              armAlarm(1);                           
+              printStatus(client);
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?3") > 0) { // train
+            if(privmodeEnabled==true) {
+              PROGMEMprintln(client,httpheaderok);
+              trainAlarm();
+              printStatus(client);
+            }
+            else{
+              PROGMEMprintln(client,httpheadernoauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?9") > 0) { // status
+            PROGMEMprintln(client,httpheaderok);
+            PROGMEMprintln(client,title);
+            printStatus(client);
+            PROGMEMprintln(client,help);
+          }
+          if(readString.indexOf("?e=") > 0) {
+            int offset = readString.indexOf("?e=");
+            char pass[5] = {readString[offset+3],readString[offset+4],readString[offset+5],readString[offset+6],'\0'};
+
+            if(login(strtoul(pass,NULL,16))) {
+              PROGMEMprintln(client,httpheaderok);
+              PROGMEMprintln(client,title);
+              client.println("authok");  
+              PROGMEMprintln(client,help);
+            }
+            else {
+              PROGMEMprintln(client,httpheadernoauth);
+              PROGMEMprintln(client,title);
+              client.println("authfail");
+              PROGMEMprintln(client,help);
+            }
+          }
+          if(readString.indexOf("?") < 1) {
+            PROGMEMprintln(client,httpheaderok);
+            PROGMEMprintln(client,title);
+            PROGMEMprintln(client,help);
           }
 
           break;
@@ -418,13 +541,8 @@ void loop()                                     // Main branch, runs over and ov
   if(hour==23 && minute==59 && door1Locked==false){
          doorLock(1);
          door1Locked==true;      
-         Serial.println("Door 1 locked for 2359 bed time.");
+         addToLog('L',2);
   }
-
-          
-
-
-
 
 
   // Notes: RFID polling is interrupt driven, just test for the reader1Count value to climb to the bit length of the key
@@ -474,9 +592,7 @@ void loop()                                     // Main branch, runs over and ov
 
    case 255:                                              // Locked out user     
     {
-     Serial.print("User ");
-     Serial.print(userMask1,DEC);
-     Serial.println(" locked out.");
+     addToLog('F',userMask1);
      break;
     }
    
@@ -553,9 +669,7 @@ void loop()                                     // Main branch, runs over and ov
   
    case 255:                                               // Locked out      
     {
-     Serial.print("User ");
-     Serial.print(userMask2,DEC);
-     Serial.println(" locked out.");
+     addToLog('F',userMask2);
      break;
     }
     
@@ -953,17 +1067,13 @@ void trainAlarm(){                       // Train the system about the default s
       delay(50);                                         // Give the readings time to settle
     }
     avg=((temp[0]+temp[1]+temp[2]+temp[3]+temp[4])/20);  // Average the results to get best values
-    Serial.print("Sensor ");
-    Serial.print(i);
-    Serial.print(" ");
-    Serial.print("value:");
-    Serial.println(avg);
+    addToLog('t',avg);
     EEPROM.write((EEPROM_ALARMZONES+i),byte(avg));   //Save results to EEPROM
     avg=0;
   }
 
   logDate();
-  PROGMEMprintln(alarmtrainMessage);
+  //PROGMEMprintln(alarmtrainMessage);
 
 
 }
@@ -992,14 +1102,11 @@ int found=-1;
   for(int i=0; i<=numUsers; i++){   
     if(input == superUserList[i]){
       logDate();
-      Serial.print("Superuser ");
-      Serial.print(i,DEC);
-      Serial.println(" found.");
+      addToLog('S',i);
       found=i;
       return found;    
     }
   }                   
- 
   return found;             //If no, return -1
 }
 
@@ -1011,9 +1118,7 @@ byte dp=1;
    else(dp=DOORPIN2);
   
   digitalWrite(dp, HIGH);
-  Serial.print("Door ");
-  Serial.print(input,DEC);
-  Serial.println(" unlocked");
+  //addToLog('U',input);
 
 }
 
@@ -1024,9 +1129,7 @@ byte dp=1;
    else(dp=DOORPIN2);
 
   digitalWrite(dp, LOW);
-  Serial.print("Door ");
-  Serial.print(input,DEC);
-  Serial.println(" locked");
+  //addToLog('L',input);
 
 }
 void unlockall() {
@@ -1037,7 +1140,8 @@ void unlockall() {
   door1Locked=false;
   door2Locked=false;
   chirpAlarm(3);    
-  PROGMEMprintln(doorsunlockedMessage);
+  
+  //PROGMEMprintln(doorsunlockedMessage);
 }
 void lockall() {                      //Lock down all doors. Can also be run periodically to safeguard system.
 
@@ -1045,147 +1149,46 @@ void lockall() {                      //Lock down all doors. Can also be run per
   digitalWrite(DOORPIN2,LOW);
   door1Locked=true;
   door2Locked=true;
-  PROGMEMprintln(doorslockedMessage);
+  //PROGMEMprintln(doorslockedMessage);
 
-}
-
-/* Logging Functions - Modify these as needed for your application. 
- Logging may be serial to USB or via Ethernet (to be added later)
- */
-
-
-void PROGMEMprintln(const prog_uchar str[])    // Function to retrieve logging strings from program memory
-{                                              // Prints newline after each string  
-  char c;
-  if(!str) return;
-  
-  //if(client.connect(server, 80) > 0) { 
-  //  client.print("GET /~access/log/?device=door&data="); 
-    while((c = pgm_read_byte(str++))){
-      Serial.write(c);
-   //   client.write(c);
-    }
-    //client.println(" HTTP/1.0");
-    //client.println();  
-    //client.stop();                             
-    // reset values coming from http
-  //  httpresponse = "";   
-  //}
-  Serial.println();
-}
-
-void PROGMEMprint(const prog_uchar str[])    // Function to retrieve logging strings from program memory
-{                                            // Does not print newlines
-  
-  char c;
-  if(!str) return;
-  //if(client.connect(server, 80) > 0) { 
-  //  client.print("GET /~access/log/?device=door&data="); 
-    while((c = pgm_read_byte(str++))){
-      Serial.write(c);
-  //    client.write(c);
-    }
-  //  client.println(" HTTP/1.0");
-  //  client.println();  
-  //  client.stop();                             
-    // reset values coming from http
-  //  httpresponse = ""; 
-  //}
 }
 
 
 void logDate()
 {
   ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
-  Serial.print(hour, DEC);
-  Serial.print(":");
-  Serial.print(minute, DEC);
-  Serial.print(":");
-  Serial.print(second, DEC);
-  Serial.print("  ");
-  Serial.print(month, DEC);
-  Serial.print("/");
-  Serial.print(dayOfMonth, DEC);
-  Serial.print("/");
-  Serial.print(year, DEC);
-  Serial.print(' ');
-  
-  switch(dayOfWeek){
-
-    case 1:{
-     Serial.print("SUN");
-     break;
-           }
-    case 2:{
-     Serial.print("MON");
-     break;
-           }
-    case 3:{
-     Serial.print("TUE");
-     break;
-          }
-    case 4:{
-     Serial.print("WED");
-     break;
-           }
-    case 5:{
-     Serial.print("THU");
-     break;
-           }
-    case 6:{
-     Serial.print("FRI");
-     break;
-           }
-    case 7:{
-     Serial.print("SAT");
-     break;
-           }  
-  }
-  
-  Serial.print(" ");
-
+  addToLog('H',hour);
+  addToLog('M',minute);
 }
 
 void logReboot() {                                  //Log system startup
   logDate();
-    PROGMEMprintln(rebootMessage);
+    //PROGMEMprintln(rebootMessage);
 }
 
 void logChime() {
   logDate();
-    PROGMEMprintln(doorChimeMessage);
+    //PROGMEMprintln(doorChimeMessage);
 }
 
 void logTagPresent (long user, byte reader) {     //Log Tag Presented events
   logDate();
-  Serial.print("User ");
- if(DEBUG==2){ Serial.print(user,HEX);}
-  Serial.print(" presented tag at reader ");
-  Serial.println(reader,DEC);
+  addToLog('R',user); // fix this, user is long instead of int
 }
 
 void logAccessGranted(long user, byte reader) {     //Log Access events
   logDate();
-  Serial.print("User ");
- if(DEBUG==2){Serial.print(user,HEX);}
-  Serial.print(" granted access at reader ");
-  Serial.println(reader,DEC);
+  addToLog('G',user); // fix this, user is long instead of int
 }                                         
 
 void logAccessDenied(long user, byte reader) {     //Log Access denied events
   logDate();
-  Serial.print("User ");
- if(DEBUG==1){Serial.print(user,HEX);} 
-  Serial.print(" denied access at reader ");
-  Serial.println(reader,DEC);
+  addToLog('D',user); // fix this, user is long instead of int
 }   
 
 void logkeypadCommand(byte reader, long command){
   logDate();
-  Serial.print("Command ");
-  Serial.print(command,HEX);
-  Serial.print(" entered at reader ");
-  Serial.println(reader,DEC);
+  addToLog('C',command); // fix this, user is long instead of int
 }  
 
 
@@ -1193,41 +1196,32 @@ void logkeypadCommand(byte reader, long command){
 
 void logalarmSensor(byte zone) {     //Log Alarm zone events
   logDate();
-  Serial.print("Zone ");
-  Serial.print(zone,DEC);
-  Serial.println(" sensor activated");
+  addToLog('S',zone); 
 }
 
 void logalarmTriggered() {
-      logDate();
-      Serial.println("Alarm triggered!");   // This phrase can be scanned for by alerting scripts.
- }
+  logDate();
+  addToLog('T',0);
+}
 
 void logunLock(long user, byte door) {        //Log unlock events
   logDate();
-  Serial.print("User ");
-  Serial.print(user,DEC);
-  Serial.print(" unlocked door ");
-  Serial.println(door,DEC);
-
+  addToLog('U',user); // fix this, user is long instead of int
 }
 
 void logalarmState(byte level) {        //Log unlock events
   logDate();
-  Serial.print("Alarm level changed to ");
-  Serial.println(level,DEC);
+  addToLog('M',level);
 }
 
 void logalarmArmed(byte level) {        //Log unlock events
   logDate();
-  Serial.print("Alarm armed level changed to ");
-  Serial.println(level,DEC);
+  addToLog('A',level);
 }
 
 void logprivFail() {
-//  Serial.println("Priv mode disabled");
-PROGMEMprintln(privsdeniedMessage);
-                   }
+  addToLog('F',2);
+}
 
 
 void hardwareTest(long iterations)
@@ -1251,6 +1245,7 @@ void hardwareTest(long iterations)
 
   for(long counter=1; counter<=iterations; counter++) {                                  // Do this number of times specified
     logDate();
+    /*
     Serial.print("\n"); 
     Serial.println("Pass: "); 
     Serial.println(counter); 
@@ -1270,19 +1265,20 @@ void hardwareTest(long iterations)
     Serial.println(analogRead(2));
     Serial.print("Input A3:");
     Serial.println(analogRead(3));
+    */
     delay(5000);
 
     digitalWrite(6,HIGH);                         // Relay exercise routine
     digitalWrite(7,HIGH);
     digitalWrite(8,HIGH);
     digitalWrite(9,HIGH);
-    Serial.println("Relays 0..3 on");
+    //Serial.println("Relays 0..3 on");
     delay(2000);
     digitalWrite(6,LOW);
     digitalWrite(7,LOW);
     digitalWrite(8,LOW);
     digitalWrite(9,LOW);
-    Serial.println("Relays 0..3 off");
+    //Serial.println("Relays 0..3 off");
 
   }
 }
@@ -1292,7 +1288,7 @@ void clearUsers()    //Erases all users from EEPROM
   for(int i=EEPROM_FIRSTUSER; i<=EEPROM_LASTUSER; i++){
     EEPROM.write(i,0);  
     logDate();
-    Serial.println("User database erased.");  
+    addToLog('Z',0);
   }
 }
 
@@ -1304,32 +1300,21 @@ void addUser(int userNum, byte userMask, unsigned long tagNumber)       // Modif
   logDate();
 
   if((userNum <0) || (userNum > NUMUSERS)) {                            // Do not write to invalid EEPROM addresses.
-
-    Serial.print("Invalid user modify attempted.");
+    addToLog('i',userNum);
   }
   else
   {
-
-
-
-
     EEPROM_buffer[0] = byte(tagNumber &  0xFFF);   // Fill the buffer with the values to write to bytes 0..4 
     EEPROM_buffer[1] = byte(tagNumber >> 8);
     EEPROM_buffer[2] = byte(tagNumber >> 16);
     EEPROM_buffer[3] = byte(tagNumber >> 24);
     EEPROM_buffer[4] = byte(userMask);
 
-
-
     for(int i=0; i<5; i++){
       EEPROM.write((offset+i), (EEPROM_buffer[i])); // Store the resulting value in 5 bytes of EEPROM.
-
     }
 
-    Serial.print("User ");
-    Serial.print(userNum,DEC);
-    Serial.println(" successfully modified"); 
-
+    addToLog('M',userNum);
 
   }
 }
@@ -1342,24 +1327,15 @@ void deleteUser(int userNum)                                            // Delet
 
   if((userNum <0) || (userNum > NUMUSERS)) {                            // Do not write to invalid EEPROM addresses.
 
-    Serial.print("Invalid user delete attempted.");
+    addToLog('I',userNum);
   }
   else
   {
-
-
-
     for(int i=0; i<5; i++){
       EEPROM.write((offset+i), 0xFF); // Store the resulting value in 5 bytes of EEPROM.
                                                     // Starting at offset.
-
-
-
     }
-
-    Serial.print("User deleted at position "); 
-    Serial.println(userNum);
-
+    addToLog('D',userNum);
   }
 
 }
@@ -1390,24 +1366,19 @@ int checkUser(unsigned long tagNumber)                                  // Check
 
 
     if((EEPROM_buffer == tagNumber) && (tagNumber !=0xFFFFFFFF) && (tagNumber !=0x0)) {    // Return a not found on blank (0xFFFFFFFF) entries 
-      Serial.print("User ");
-      Serial.print(((i-EEPROM_FIRSTUSER)/5),DEC);
-      Serial.println(" authenticated.");
+      addToLog('C',((i-EEPROM_FIRSTUSER)/5));
       found = EEPROM.read(i+4);
       return found;
     }                             
 
   }
-  Serial.println("User not found");
+  addToLog('c',0);
   delay(1000);                                                            // Delay to prevent brute-force attacks on reader
   return found;                        
 }
 
 
-
-
-
-void dumpUser(byte usernum)                                            // Return information ona particular entry in the local DB
+void dumpUser(EthernetClient client, byte usernum)                     // Return information ona particular entry in the local DB
 {                                                                      // Users number 0..NUMUSERS
 
 
@@ -1427,65 +1398,93 @@ void dumpUser(byte usernum)                                            // Return
     EEPROM_buffer= EEPROM_buffer<<8;
     EEPROM_buffer=(EEPROM_buffer ^ EEPROM.read(i));
 
-
-
-    Serial.print(((i-EEPROM_FIRSTUSER)/5),DEC);
-    Serial.print("\t");
-    Serial.print(EEPROM.read(i+4),DEC);
-    Serial.print("\t");
+    client.print(((i-EEPROM_FIRSTUSER)/5),DEC);
+    client.print("\t");
+    client.print(EEPROM.read(i+4),DEC);
+    client.print("\t");
 
     if(DEBUG==2){
-      Serial.println(EEPROM_buffer,HEX);
+      client.println(EEPROM_buffer,HEX);
                  }
      else {
            if(EEPROM_buffer != 0xFFFFFFFF) {
-             Serial.println("********");
+             client.println("********");
            }
      }
   
   }
-  else Serial.println("Bad user number!");
+  else client.println("Bad user number!");
 }
 
-void login(long input) {
+boolean login(long input) {
   logDate();
   if((consoleFail>=5) && (millis()-consolefailTimer<300000))  // Do not allow priv mode if more than 5 failed logins in 5 minute
   {  
-    PROGMEMprintln(privsAttemptsMessage);
+    addToLog('F',1);
+    return false;
   }
   else {
     if (input == PRIVPASSWORD)
     {
       consoleFail=0; 
-      PROGMEMprintln(privsenabledMessage);
+      addToLog('S',0);
       privmodeEnabled=true;
+      return true;
     }
     else {
-      PROGMEMprintln(privsdisabledMessage);
+      addToLog('F',0);
       privmodeEnabled=false;    
       if(consoleFail==0) {                // Set the timeout for failed logins
         consolefailTimer=millis();
       }
       consoleFail++;                 // Increment the login failure counter
+      return false;
     } 
   }
 }
 
-void showUser(char* input) {
-  
-  if(privmodeEnabled==true) {
-    Serial.print("UserNum:");
-    Serial.print(" ");
-    Serial.print("Usermask:");
-    Serial.print(" ");
-    Serial.println("TagNum:");
-    dumpUser(atoi(input));
-    //Serial.println();      // commented out due to dumpUser always printing a line -WB 7-7-2011 
-  }
-  else{logprivFail();}
-
+void printStatus(EthernetClient client) {
+  client.println("<pre>");
+  client.print("Alarm armed:");
+  client.println(alarmArmed,DEC);
+  client.print("Alarm activated:");
+  client.println(alarmActivated,DEC);
+  client.print("Alarm 3:");
+  client.println(pollAlarm(3),DEC);
+  client.print("Alarm 2:");
+  client.println(pollAlarm(2),DEC);                  
+  client.print("Door 1 locked:");
+  client.println(door1Locked);                    
+  client.print("Door 2 locked:");
+  client.println(door2Locked); 
+  client.println("</pre>"); 
 }
 
+
+void addToLog(char type, int data) {
+  logKeys[logCursor] = type;
+  logData[logCursor] = data;
+  
+  logCursor += 1;
+  if(logCursor > 20) {
+    logCursor = 0;
+  }
+}
+
+void readFromLog(int index, char &type, int &data) {
+  logKeys[index] = type;
+  logData[index] = data;
+}
+
+
+void PROGMEMprintln(EthernetClient client, const prog_uchar str[])    // Function to retrieve strings from program memory
+{
+  char c;
+  if(!str) return;
+  while((c = pgm_read_byte(str++))){
+    client.print(c);
+  }
+}
 
 /* Wrapper functions for interrupt attachment
  Could be cleaned up in library?
