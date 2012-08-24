@@ -45,12 +45,37 @@
  * Ethernet: pins 10,11,12,13 (Not connected to the board, reserved for the Ethernet shield)
  *
  * Quickstart tips: 
- * Set the console password(PRIVPASSWORD) value to a numeric DEC or HEX value.
+ * Set the privilege password(PRIVPASSWORD) value to a numeric DEC or HEX value.
  * Define the static user list by swiping a tag and copying the value received into the #define values shown below under Adam, Bob, and Carl.
- * Change MAC, IP, and SERVER as appropriate for your network.
- * See the lines containing "~access" in this file for how your webserver should be structured for rudimentary logging.
- * Compile and upload the code, then log in via serial console at 57600,8,N,1
+ * Change MAC and IP as appropriate for your network.
+ * Compile and upload the code, then log in via HTTP to the IP you specified.
  *
+ * Guide to log keys and data:
+ * A=alarm armed (# level)
+ * a=added user (# usernum)
+ * C=keypad command (# command)
+ * c=checked user (0=failed, #=found usernum)
+ * D=denied access (# card num)
+ * d=deleted user (# usernum)
+ * E=second (#=second)
+ * F=priv fail (0=wrong pw, 1=too many attempts, 2=not logged in)
+ * f=card fail (#=usermask)
+ * G=granted access (# card num)
+ * H=hour (#=hour)
+ * i=attempt to write to invalid eeprom address (# usernum)
+ * I=attempt to delete from invalid eeprom address (# usernum)
+ * L=locked (1=door1, 2=door2, 3=bedtime)
+ * M=minute (#=minute)
+ * m=alarm state (# level)
+ * R=read tag (# card num)
+ * Q=superuser authed (#=superuser)
+ * S=auth (0=privileged mode enabled)
+ * s=alarm sensor (# zone)
+ * t=alarm trained (#=sensor value)
+ * T=alarm triggered (0)
+ * U=unlocked door (1=door1, 2=door2, # card num)
+ * Z=user db cleared (0)
+ * z=log cleared (0)
  */
 
 #include <Wire.h>         // Needed for I2C Connection to the DS1307 date/time chip
@@ -479,6 +504,15 @@ void loop()                                     // Main branch, runs over and ov
           if(readString.indexOf("?z") > 0) { // log
             if(privmodeEnabled==true) {
               printLog(client);
+            }
+            else{
+              PROGMEMprintln(client,noauth);
+              logprivFail();
+            }
+          }
+          if(readString.indexOf("?y") > 0) { // clear log
+            if(privmodeEnabled==true) {
+              clearLog(client);
             }
             else{
               PROGMEMprintln(client,noauth);
@@ -1124,7 +1158,7 @@ int found=-1;
   for(int i=0; i<=numUsers; i++){   
     if(input == superUserList[i]){
       logDate();
-      addToLog('S',i);
+      addToLog('Q',i);
       found=i;
       return found;    
     }
@@ -1357,7 +1391,7 @@ void deleteUser(int userNum)                                            // Delet
       EEPROM.write((offset+i), 0xFF); // Store the resulting value in 5 bytes of EEPROM.
                                                     // Starting at offset.
     }
-    addToLog('D',userNum);
+    addToLog('d',userNum);
   }
 
 }
@@ -1503,6 +1537,16 @@ void printLog(EthernetClient client) {
   client.println("</pre>");
 }
 
+void clearLog(EthernetClient client) {
+  for(int i=0;i<sizeof(logKeys);i++) {
+    logKeys[i] = 0;
+    logData[i] = 0;
+  }
+  addToLog('z',0);
+  logDate();
+  
+  client.println("cleared log");
+}
 
 void PROGMEMprintln(EthernetClient client, const prog_uchar str[])    // Function to retrieve strings from program memory
 {
