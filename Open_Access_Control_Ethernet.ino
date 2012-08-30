@@ -252,7 +252,7 @@ void setup(){           // Runs once at Arduino boot-up
   }
 
 
-  ds1307.setDateDs1307(0,49,1,3,7,6,11);         
+  ds1307.setDateDs1307(0,41,2,5,30,8,12);         
   /*  Sets the date/time (needed once at commissioning)
    
    byte second,        // 0-59
@@ -278,7 +278,7 @@ void setup(){           // Runs once at Arduino boot-up
 
 }
 void loop()                                     // Main branch, runs over and over again
-{              
+{
 
   // listen for incoming clients
   EthernetClient client = server.available();
@@ -304,6 +304,17 @@ void loop()                                     // Main branch, runs over and ov
         if (c == '\n' && currentLineIsBlank) {
           PROGMEMprintln(client,httpheaderok);
           
+          if(readString.indexOf("?e=") > 0 || readString.indexOf("&e=") > 0) { // login -- use e= to allow ?e and &e
+            int offset = readString.indexOf("e=");
+            char pass[5] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],'\0'};
+
+            if(login(strtoul(pass,NULL,16))) {
+              client.println("authok");  
+            }
+            else {
+              client.println("authfail");
+            }
+          }
           if(readString.indexOf("?s") > 0) { // show user
             int offset = readString.indexOf("?s");
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
@@ -356,7 +367,7 @@ void loop()                                     // Main branch, runs over and ov
           }
           if(readString.indexOf("?a") > 0) {  //list all users
             if(privmodeEnabled==true) {
-              logDate();
+              //logDate();
               client.println("<pre>");
               client.print("UserNum:");
               client.print(" ");
@@ -524,7 +535,7 @@ void loop()                                     // Main branch, runs over and ov
               }
               logCursor = 0;
               addToLog('z',0);
-              logDate();
+              //logDate();
               
               client.println("y");
             }
@@ -533,67 +544,12 @@ void loop()                                     // Main branch, runs over and ov
               logprivFail();
             }
           }
-          /*
-          if(readString.indexOf("?d=") > 0) { // modify date (?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - day-dayofweek-month-year-hour-min-sec)
-            int offset = readString.indexOf("?d=");  // date, 3 chars
-            int initialoffset = offset; // save for comparison
-            
-            char day2[3] = {readString[offset+3],readString[offset+4],'\0'};
-
-            offset = readString.indexOf("&w="); // week, 1 char
-            char dayofweek2[2] = {readString[offset+3],'\0'};
-
-            offset = readString.indexOf("&m="); // month, 2 char
-            char month2[3] = {readString[offset+3],readString[offset+4],'\0'};
-            
-            offset = readString.indexOf("&y="); // year, 2 char
-            char year2[3] = {readString[offset+3],readString[offset+4],'\0'};
-            
-            offset = readString.indexOf("&h="); // hour, 2 char
-            char hour2[3] = {readString[offset+3],readString[offset+4],'\0'};
-            
-            offset = readString.indexOf("&i="); // minute, 2 char
-            char minute2[3] = {readString[offset+3],readString[offset+4],'\0'};
-            
-            offset = readString.indexOf("&s="); // second, 2 char
-            char second2[3] = {readString[offset+3],readString[offset+4],'\0'};
-
-            
-            if(offset-initialoffset == 10){
-              if(privmodeEnabled==true) {
-                
-                //update date
-                ds1307.setDateDs1307(atoi(second2),atoi(minute2),atoi(hour2),atoi(dayofweek2),atoi(day2),atoi(month2),atoi(year2));
-                
-              }
-              else{
-                PROGMEMprintln(client,noauth);
-                logprivFail();
-              } 
-            }
-            else {
-              client.println("err:badquery");
-            }
-            
-          }*/
-          if(readString.indexOf("?e=") > 0) {
-            int offset = readString.indexOf("?e=");
-            char pass[5] = {readString[offset+3],readString[offset+4],readString[offset+5],readString[offset+6],'\0'};
-
-            if(login(strtoul(pass,NULL,16))) {
-              PROGMEMprintln(client,title);
-              client.println("authok");  
-              PROGMEMprintln(client,help);
-            }
-            else {
-              PROGMEMprintln(client,title);
-              client.println("authfail");
-              PROGMEMprintln(client,help);
-            }
-          }
           if(readString.indexOf("?") < 0) {
             PROGMEMprintln(client,title);
             PROGMEMprintln(client,help);
+          }
+          if(readString.indexOf("&e=") > 0) { // if e is passed as a second parameter, log out.
+            login(strtoul("0000",NULL,16)); // 0000 = logout
           }
 
           break;
@@ -1281,12 +1237,12 @@ void logReboot() {                                  //Log system startup
 }
 
 void logChime() {
-  logDate();
+  //logDate();
     //PROGMEMprintln(doorChimeMessage);
 }
 
 void logTagPresent (long user, byte reader) {     //Log Tag Presented events
-  logDate();
+  //logDate();
   addToLog('R',user%divisor); 
   addToLog('r',user/divisor); 
 }
@@ -1313,7 +1269,7 @@ void logkeypadCommand(byte user, long command){
 
 
 void logalarmSensor(byte zone) {     //Log Alarm zone events
-  logDate();
+  //logDate();
   addToLog('s',zone); 
 }
 
@@ -1537,7 +1493,7 @@ void dumpUser(EthernetClient client, byte usernum)                     // Return
 }
 
 boolean login(long input) {
-  logDate();
+  //logDate();
   if((consoleFail>=5) && (millis()-consolefailTimer<300000))  // Do not allow priv mode if more than 5 failed logins in 5 minute
   {  
     addToLog('F',1);
@@ -1552,7 +1508,7 @@ boolean login(long input) {
       return true;
     }
     else {
-      addToLog('F',0);
+      //addToLog('F',0);
       privmodeEnabled=false;    
       if(consoleFail==0) {                // Set the timeout for failed logins
         consolefailTimer=millis();
