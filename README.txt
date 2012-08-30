@@ -52,4 +52,5 @@ The following pin assignments are assumed by this software:
 -Pins 5,6,7,8 for Relays
 -Pins A0,A1,A2,A3 for alarm sensors
 -Pins A4,A5 for SDA,SCL (I2C)
- 
+
+(g*32767+G-1)/2 
