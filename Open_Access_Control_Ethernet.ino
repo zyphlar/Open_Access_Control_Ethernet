@@ -182,8 +182,8 @@ unsigned long keypadValue=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
 
 // Log buffer
-char logKeys[40]={0};
-int logData[40]={0};
+char logKeys[10]={0};
+long logData[10]={0};
 int logCursor=0;
 
 // Initialize the Ethernet server library
@@ -205,13 +205,13 @@ PCATTACH pcattach;    // Software interrupt library
 
 const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
 const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be padded.\n\n?e=0000 - enable privileged (enter 0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) permission(0-255) tag(00000000-ffffffff)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
+const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be padded.\n\n?e=0000 - login (0s to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
 const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
-const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all doors."};
+const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all."};
 const prog_uchar unlock1[]        PROGMEM  = {"Unlocked door 1."};
 const prog_uchar unlock2[]        PROGMEM  = {"Unlocked door 2."};
-const prog_uchar open1[]          PROGMEM  = {"Opened door 1 for a few seconds."};
-const prog_uchar open2[]          PROGMEM  = {"Opened door 2 for a few seconds."};
+const prog_uchar open1[]          PROGMEM  = {"Temp opened door 1."};
+const prog_uchar open2[]          PROGMEM  = {"Temp opened door 2."};
 const prog_uchar lockboth[]       PROGMEM  = {"Locked all doors."};
 
 void setup(){           // Runs once at Arduino boot-up
@@ -1566,7 +1566,7 @@ void printStatus(EthernetClient client) {
 }
 
 
-void addToLog(char type, int data) {
+void addToLog(char type, long data) {
   logKeys[logCursor] = type;
   logData[logCursor] = data;
   
