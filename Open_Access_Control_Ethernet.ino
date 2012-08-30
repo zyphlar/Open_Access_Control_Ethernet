@@ -1,7 +1,7 @@
 /*
  * Open Source RFID Access Controller - Ethernet Branch
  *
- * 8/8/2012 v0.01 (branch based on upstream 4/3/2011 v1.32)
+ * 8/29/2012 v0.02 (branch based on upstream 4/3/2011 v1.32)
  * Will Bradley - will@heatsynclabs.org
  * 
  * Upstream:
@@ -82,27 +82,31 @@
 #include <EEPROM.h>       // Needed for saving to non-voilatile memory on the Arduino.
 #include <avr/pgmspace.h> // Allows data to be stored in FLASH instead of RAM
 
-
 #include <Ethernet.h>     // Ethernet stuff
 #include <SPI.h>          
-
 
 #include <DS1307.h>       // DS1307 RTC Clock/Date/Time chip library
 #include <WIEGAND26.h>    // Wiegand 26 reader format libary
 #include <PCATTACH.h>     // Pcint.h implementation, allows for >2 software interupts.
 
 
-/* Static user List - Implemented as an array for testing and access override 
- */                               
+#define PRIVPASSWORD 0x1234             // Console "priveleged mode" password
 
-#define DEBUG 2                         // Set to 2 for display of raw tag numbers in log files, 1 for only denied, 0 for never.               
+// Static user List - Implemented as an array for testing and access override 
 
 #define adam   0xABCDE                  // Name and badge number in HEX. We are not using checksums or site ID, just the whole
 #define bob   0xBCDEF                  // output string from the reader.
 #define carl   0xA1B2C3
 const long  superUserList[] = { adam, bob, carl};  // Super user table (cannot be changed by software)
 
-#define PRIVPASSWORD 0x1234             // Console "priveleged mode" password
+// Enter a MAC address and IP address for your controller below.
+// The IP address will be dependent on your local network:
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(192,168,1,177);
+
+// Stuff below here doesn't necessarily need to be edited.
+
+#define DEBUG 2                         // Set to 2 for display of raw tag numbers in log files, 1 for only denied, 0 for never.               
 
 #define DOORDELAY 5000                  // How long to open door lock once access is granted. (2500 = 2.5s)
 #define SENSORTHRESHOLD 100             // Analog sensor change that will trigger an alarm (0..255)
@@ -181,12 +185,6 @@ boolean privmodeEnabled = false;                               // Switch for ena
 char logKeys[40]={0};
 int logData[40]={0};
 int logCursor=0;
-
-
-// Enter a MAC address and IP address for your controller below.
-// The IP address will be dependent on your local network:
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip(192,168,1,177);
 
 // Initialize the Ethernet server library
 // with the IP address and port you want to use 
