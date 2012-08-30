@@ -54,13 +54,17 @@
  * A=alarm armed (# level)
  * a=added user (# usernum)
  * C=keypad command (# command)
+ * c=second half
  * c=checked user (0=failed, #=found usernum)
  * D=denied access (# card num)
+ * d=second half
  * d=deleted user (# usernum)
  * E=second (#=second)
  * F=priv fail (0=wrong pw, 1=too many attempts, 2=not logged in)
+ * f=second half
  * f=card fail (#=usermask)
  * G=granted access (# card num)
+ * g=second half of card
  * H=hour (#=hour)
  * i=attempt to write to invalid eeprom address (# usernum)
  * I=attempt to delete from invalid eeprom address (# usernum)
@@ -68,12 +72,14 @@
  * M=minute (#=minute)
  * m=alarm state (# level)
  * R=read tag (# card num)
+ * r=second half of tag
  * Q=superuser authed (#=superuser)
  * S=auth (0=privileged mode enabled)
  * s=alarm sensor (# zone)
  * t=alarm trained (#=sensor value)
  * T=alarm triggered (0)
  * U=unlocked door (1=door1, 2=door2, # card num)
+ * u=second half of card
  * Z=user db cleared (0)
  * z=log cleared (0)
  */
@@ -207,14 +213,16 @@ PCATTACH pcattach;    // Software interrupt library
 
 const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
 const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/><pre>Numbers must be padded.\n\n?e=0000 - enable privileged (enter 0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) permission(0-255) tag(00000000-ffffffff)\n?a - list all users\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
+const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
 const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
-const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all doors."};
-const prog_uchar unlock1[]        PROGMEM  = {"Unlocked door 1."};
-const prog_uchar unlock2[]        PROGMEM  = {"Unlocked door 2."};
-const prog_uchar open1[]          PROGMEM  = {"Opened door 1 for a few seconds."};
-const prog_uchar open2[]          PROGMEM  = {"Opened door 2 for a few seconds."};
-const prog_uchar lockboth[]       PROGMEM  = {"Locked all doors."};
+const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all."};
+const prog_uchar unlock1[]        PROGMEM  = {"Unlocked 1."};
+const prog_uchar unlock2[]        PROGMEM  = {"Unlocked 2."};
+const prog_uchar open1[]          PROGMEM  = {"Opened 1."};
+const prog_uchar open2[]          PROGMEM  = {"Opened 2."};
+const prog_uchar lockboth[]       PROGMEM  = {"Locked all."};
+
+const int divisor = 32767; 
 
 void setup(){           // Runs once at Arduino boot-up
 
@@ -1279,22 +1287,26 @@ void logChime() {
 
 void logTagPresent (long user, byte reader) {     //Log Tag Presented events
   logDate();
-  addToLog('R',user); // fix this, user is long instead of int
+  addToLog('R',user%divisor); 
+  addToLog('r',user/divisor); 
 }
 
 void logAccessGranted(long user, byte reader) {     //Log Access events
   logDate();
-  addToLog('G',user); // fix this, user is long instead of int
+  addToLog('G',user%divisor); 
+  addToLog('g',user/divisor); 
 }                                         
 
 void logAccessDenied(long user, byte reader) {     //Log Access denied events
   logDate();
-  addToLog('D',user); // fix this, user is long instead of int
+  addToLog('D',user%divisor); 
+  addToLog('d',user/divisor); 
 }   
 
-void logkeypadCommand(byte reader, long command){
+void logkeypadCommand(byte user, long command){
   logDate();
-  addToLog('C',command); // fix this, user is long instead of int
+  addToLog('C',user%divisor); 
+  addToLog('c',user/divisor); 
 }  
 
 
@@ -1312,7 +1324,8 @@ void logalarmTriggered() {
 
 void logunLock(long user, byte door) {        //Log unlock events
   logDate();
-  addToLog('U',user); // fix this, user is long instead of int
+  addToLog('U',user%divisor); 
+  addToLog('u',user/divisor); 
 }
 
 void logalarmState(byte level) {        //Log unlock events
