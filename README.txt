@@ -26,8 +26,7 @@ Note: Unpack the libraries (WIEGAND26, DS1307, PCATTACH) into your arduino
 libraries directory.  This is usually:
 
 ~/arduino/hardware/libraries/
-
-
+(restart the Arduino program afterwards to apply the changes.)
 
 The hardware design for the Open Access Control for Hacker Spaces uses the Arduino 
 board with Atmega 328. It has been tested with:
