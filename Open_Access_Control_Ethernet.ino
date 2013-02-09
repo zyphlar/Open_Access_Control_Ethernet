@@ -1,8 +1,9 @@
 /*
  * Open Source RFID Access Controller - Ethernet Branch
  *
- * 8/30/2012 v0.02 (branch based on upstream 4/3/2011 v1.32)
+ * 2/9/2013 v0.03 (branch based on upstream 4/3/2011 v1.32)
  * Will Bradley - will@heatsynclabs.org
+ * Short Tie - tie.short@gmail.com
  * 
  * Upstream:
  * Last build test with Arduino v00.21
