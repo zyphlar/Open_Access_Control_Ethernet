@@ -252,17 +252,7 @@ void setup(){           // Runs once at Arduino boot-up
   }
 
 
-  ds1307.setDateDs1307(0,41,2,5,30,8,12);         
-  /*  Sets the date/time (needed once at commissioning)
-   
-   byte second,        // 0-59
-   byte minute,        // 0-59
-   byte hour,          // 1-23
-   byte dayOfWeek,     // 1-7
-   byte dayOfMonth,    // 1-28/29/30/31
-   byte month,         // 1-12
-   byte year);          // 0-99
-   */
+
 
 
 
@@ -543,6 +533,39 @@ void loop()                                     // Main branch, runs over and ov
               PROGMEMprintln(client,noauth);
               logprivFail();
             }
+          }
+          if(readString.indexOf("?w") > 0) { // Print out the date - "YYMMDDWHHmmSS"
+            ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
+
+            client.print(year, DEC);
+            client.print(month, DEC);
+            client.print(dayOfMonth, DEC);
+            client.print(dayOfWeek, DEC);
+            client.print(hour, DEC);
+            client.print(minute, DEC);
+            client.print(second, DEC);
+          }
+          if(readString.indexOf("?x") > 0) { // Assign date/time format (?xYYMMDDWHHmmSS)
+            int offset = readString.indexOf("?x");
+            char year[3] = {readString[offset+2],readString[offset+3],'\0'};
+            char mon[3] = {readString[offset+4],readString[offset+5],'\0'};
+            char dom[3] = {readString[offset+6],readString[offset+7],'\0'};
+            byte dow = {readString[offset+8]};
+            char hour[3] = {readString[offset+9],readString[offset+10],'\0'};
+            char minute[3] = {readString[offset+11],readString[offset+12],'\0'};
+            char sec[3] = {readString[offset+13],readString[offset+14],'\0'};
+            ds1307.setDateDs1307(atoi(sec),atoi(minute),atoi(hour),dow,atoi(dom),atoi(mon),atoi(year));         
+  /*  Sets the date/time (needed once at commissioning)
+   
+   byte second,        // 0-59
+   byte minute,        // 0-59
+   byte hour,          // 1-23
+   byte dayOfWeek,     // 1-7
+   byte dayOfMonth,    // 1-28/29/30/31
+   byte month,         // 1-12
+   byte year);          // 0-99
+   */
+
           }
           if(readString.indexOf("?") < 0) {
             PROGMEMprintln(client,title);
