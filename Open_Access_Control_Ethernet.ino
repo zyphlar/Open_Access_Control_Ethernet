@@ -214,7 +214,7 @@ PCATTACH pcattach;    // Software interrupt library
 
 const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
 const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log</pre>"};    //\n?d=00&w=0&m=00&y=00&h=00&i=00&s=00 - set day-dayofweek-month-year-hour-min-sec
+const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log\n?w - View date/time\n?xYYMMDDWHHmmSS - Assign date/time</pre>"};
 const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
 const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all."};
 const prog_uchar unlock1[]        PROGMEM  = {"Unlocked 1."};
