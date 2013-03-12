@@ -83,6 +83,8 @@
  * u=second half of card
  * Z=user db cleared (0)
  * z=log cleared (0)
+ *   Log Format:
+ *   H M E 
  */
 
 #include <Wire.h>         // Needed for I2C Connection to the DS1307 date/time chip
@@ -113,6 +115,7 @@ const long  superUserList[] = { adam, bob, carl};  // Super user table (cannot b
 
 #define DOORDELAY 5000                  // How long to open door lock once access is granted. (2500 = 2.5s)
 #define SENSORTHRESHOLD 100             // Analog sensor change that will trigger an alarm (0..255)
+#define NUM_SENSORS 4                   // The number of sensors
 
 #define EEPROM_ALARM 0                  // EEPROM address to store alarm triggered state between reboots (0..511)
 #define EEPROM_ALARMARMED 1             // EEPROM address to store alarm armed state between reboots
@@ -128,6 +131,44 @@ const long  superUserList[] = { adam, bob, carl};  // Super user table (cannot b
 #define DOORPIN2 relayPins[2]           // Define the pin for electrified door 2 hardware
 #define ALARMSTROBEPIN relayPins[3]     // Define the "non alarm: output pin. Can go to a strobe, small chime, etc
 #define ALARMSIRENPIN  relayPins[1]     // Define the alarm siren pin. This should be a LOUD siren for alarm purposes.
+
+/* Definitions for Log types */
+#define LOG_REBOOT		0
+#define LOG_CHIME		1
+#define LOG_TAG_PRESENT		2
+#define LOG_ACCESS_GRANTED	3
+#define LOG_ACCESS_DENIED	4
+#define LOG_KEYPAD_COMMAND	5
+#define LOG_ALARM_ZONE		6
+#define LOG_ALARM_TRIGGERED	7
+#define LOG_UNLOCK		8
+#define LOG_LOCK		9
+#define LOG_ALARM_STATE		10
+#define LOG_ALARM_ARMED		11
+#define LOG_PRIVELEDGE_FAILED	12
+#define LOG_ALARM_TRAIN		13
+#define LOG_SUPERUSER		14
+#define LOG_HARDWARE_TEST	15
+#define LOG_CLEAR_USERS		16
+#define LOG_ADD_USER_FAIL	17
+#define LOG_ADD_USER_SUCCESS	18
+#define LOG_DELETE_USER_FAIL	19
+#define LOG_DELETE_USER_SUCCESS	20
+#define LOG_CHECK_USER		21
+#define LOG_LOGIN_FAIL		22
+#define LOG_LOGIN_SUCCESS	23
+#define LOG_LOCKED_OUT_USER	24
+#define LOG_CLEAR_LOG		25
+
+/* Definitions for LOG_PRIVILEDGE_FAILED */
+#define WRONG_PASSWORD		0
+#define TOO_MANY_TRIES		1
+#define NOT_LOGGED_IN		2
+
+/* Defintions for LOG_LOCK */
+#define DOOR1			1
+#define DOOR2			2
+#define BEDTIME			3
 
 byte reader1Pins[]={2,3};               // Reader 1 connected to pins 4,5
 byte reader2Pins[]= {4,5};              // Reader2 connected to pins 6,7
@@ -162,7 +203,7 @@ byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;     // Global RTC
 byte alarmActivated = EEPROM.read(EEPROM_ALARM);                   // Read the last alarm state as saved in eeprom.
 byte alarmArmed = EEPROM.read(EEPROM_ALARMARMED);                  // Alarm level variable (0..5, 0==OFF) 
 
-boolean sensor[4]={false};                                         // Keep track of tripped sensors, do not log again until reset.
+boolean sensor[NUM_SENSORS]={false};                                         // Keep track of tripped sensors, do not log again until reset.
 unsigned long sensorDelay[2]={0};                                  // Same as above, but sets a timer for 2 of them. Useful for logging
                                                                    // motion detector hits for "occupancy check" functions.
 
@@ -171,8 +212,7 @@ volatile long reader1 = 0;
 volatile int  reader1Count = 0;
 volatile long reader2 = 0;
 volatile int  reader2Count = 0;
-int userMask1=0;
-int userMask2=0;
+int userMask=0;
 boolean keypadGranted=0;                                       // Variable that is set for authenticated users to use keypad after login
 
 //volatile long reader3 = 0;                                   // Uncomment if using a third reader.
@@ -185,6 +225,7 @@ unsigned long keypadValue=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
 
 // Log buffer
+int logLevel=0;
 char logKeys[40]={0};
 int logData[40]={0};
 int logCursor=0;
@@ -214,7 +255,7 @@ PCATTACH pcattach;    // Software interrupt library
 
 const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
 const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l - lock all\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log\n?w - View date/time\n?xYYMMDDWHHmmSS - Assign date/time</pre>"};
+const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l ?l=1 ?l=2 - lock all/1/2\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log\n?w0000000000000 - show year-month-day-dayofweek-hour-min-sec\n?x - set year-month-day-dayofweek-hour-min-sec\n?v=0 ?v=1 ?v=2 ?v=3 - set logging to MostVerbose/Verbose/Quiet/MostQuiet</pre>"}; 
 const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
 const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all."};
 const prog_uchar unlock1[]        PROGMEM  = {"Unlocked 1."};
@@ -260,7 +301,7 @@ void setup(){           // Runs once at Arduino boot-up
 //  Serial.begin(57600);	               	       // Set up Serial output at 8,N,1,57600bps
   
   
-  logReboot();
+  log(LOG_REBOOT, 0, 0);
   chirpAlarm(1);                               // Chirp the alarm to show system ready.
 
 //  hardwareTest(100);                         // IO Pin testing routing (use to check your inputs with hi/lo +(5-12V) sources)
@@ -294,8 +335,15 @@ void loop()                                     // Main branch, runs over and ov
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {
           PROGMEMprintln(client,httpheaderok);
-          
-          if(readString.indexOf("?e=") > 0 || readString.indexOf("&e=") > 0) { // login -- use e= to allow ?e and &e
+
+          if(readString.indexOf("?") < 0) {
+            PROGMEMprintln(client,title);
+            PROGMEMprintln(client,help);
+          }
+          else{
+          int queryStart = readString.indexOf("?");
+
+          if(readString.indexOf("?e=") > 0 || readString.indexOf("&e=") > 0) { // login
             int offset = readString.indexOf("e=");
             char pass[5] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],'\0'};
 
@@ -306,11 +354,15 @@ void loop()                                     // Main branch, runs over and ov
               client.println("authfail");
             }
           }
-          if(readString.indexOf("?s") > 0) { // show user
-            int offset = readString.indexOf("?s");
-            char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
+
+          if(privmodeEnabled==true) {
+
+          switch(readString[queryStart +1]){
+
+          case 's': { // show user
+              int offset = readString.indexOf("?s");
+              char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
-            if(privmodeEnabled==true) {
               client.println("<pre>");
               client.print("UserNum:");
               client.print(" ");
@@ -319,13 +371,9 @@ void loop()                                     // Main branch, runs over and ov
               client.println("TagNum:");
               dumpUser(client, atoi(usernum));
               client.println("</pre>");
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?m") > 0) { // modify user #, permission #, tag # (?m000&p000&t00000000 must be zero-padded)
+          case 'm': { // modify user #, permission #, tag # (?m000&p000&t00000000 must be zero-padded)
             int offset = readString.indexOf("?m");  // user, 3 chars
             int initialoffset = offset; // save for comparison
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
@@ -338,7 +386,6 @@ void loop()                                     // Main branch, runs over and ov
                                readString[offset+6],readString[offset+7],readString[offset+8],readString[offset+9],'\0'};
             
             if(offset-initialoffset == 10){
-              if(privmodeEnabled==true) {
                 client.println("<pre>");
                 client.println("prev:");
                 dumpUser(client, atoi(usernum));
@@ -346,19 +393,13 @@ void loop()                                     // Main branch, runs over and ov
                 client.println("cur:");
                 dumpUser(client, atoi(usernum));
                 client.println("</pre>");
-              }
-              else{
-                PROGMEMprintln(client,noauth);
-                logprivFail();
-              } 
             }
             else {
               client.println("err:query");
             }
+            break;
           }
-          if(readString.indexOf("?a") > 0) {  //list all users
-            if(privmodeEnabled==true) {
-              //logDate();
+          case 'a': {  //list all users
               client.println("<pre>");
               client.print("UserNum:");
               client.print(" ");
@@ -369,17 +410,12 @@ void loop()                                     // Main branch, runs over and ov
                 dumpUser(client,i);
               }
               client.println("</pre>");
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?r") > 0) {  //remove user (?r000)
+          case 'r': {  //remove user (?r000)
             int offset = readString.indexOf("?r");
             char usernum[4] = {readString[offset+2],readString[offset+3],readString[offset+4],'\0'};
             
-            if(privmodeEnabled==true) {
               client.println("r");           
               client.println("<pre>");
               client.println("prev:");
@@ -387,18 +423,12 @@ void loop()                                     // Main branch, runs over and ov
               deleteUser(atoi(usernum));
               client.println("cur:");
               dumpUser(client,atoi(usernum));
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?o") > 0) {  // open door ?o1 or ?o2
+          case 'o': {  // open door ?o1 or ?o2
             int offset = readString.indexOf("?o");
-            char doornum[2] = {readString[offset+2],'\0'};
   
-            if(privmodeEnabled==true) {
-              if(atoi(doornum) == 1){  
+              if(readString[offset+2] == '1'){  
                 alarmState(0);                                       // Set to door chime only/open doors                                                                       
                 armAlarm(4);
                 doorUnlock(1);                                       // Open the door specified
@@ -406,7 +436,7 @@ void loop()                                     // Main branch, runs over and ov
                 PROGMEMprintln(client,open1);
               }                    
               else{
-                if(atoi(doornum) == 2){  
+                if(readString[offset+2] == '2'){  
                   alarmState(0);                                       // Set to door chime only/open doors                                                                       
                   armAlarm(4);
                   doorUnlock(2);                                        
@@ -417,18 +447,12 @@ void loop()                                     // Main branch, runs over and ov
                   client.println("err:door#");
                 }
               }
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?u") > 0) {  //unlock (?u or ?u=1 or ?u=2)
-            if(privmodeEnabled==true) {
+          case 'u': {  //unlock (?u or ?u=1 or ?u=2)
               int offset = readString.indexOf("?u="); // see if we're unlocking a specific door
               if(offset > 0) {
-                char doornum[2] = {readString[offset+3],'\0'};
-                if(atoi(doornum) == 1){ 
+                if(readString[offset+3] == '1'){ 
                   doorUnlock(1);
                   alarmState(0);
                   armAlarm(4);
@@ -437,7 +461,7 @@ void loop()                                     // Main branch, runs over and ov
                   PROGMEMprintln(client,unlock1);
                 }
                 else {
-                  if(atoi(doornum) == 2){ 
+                  if(readString[offset+3] == '2'){ 
                     doorUnlock(2);
                     alarmState(0);
                     armAlarm(4);
@@ -455,87 +479,64 @@ void loop()                                     // Main branch, runs over and ov
                 unlockall();
               }
               printStatus(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?l") > 0) {  //lock
-            if(privmodeEnabled==true) {
-              lockall();
-              chirpAlarm(1); 
-              PROGMEMprintln(client,lockboth);  
+          case 'l': {   //lock (?l or ?l=1 or ?l=2)
+              int offset = readString.indexOf("?l="); // see if we're unlocking a specific door
+              if(offset > 0) {
+                if(readString[offset+3] == '1'){ 
+                  doorLock(1);
+                  door1Locked=true;
+                  chirpAlarm(3);
+                }
+                else if(readString[offset+3] == '2'){ 
+                    doorLock(2);
+                    door2Locked=true;
+                    chirpAlarm(3);          
+                }
+                else {
+                  lockall();
+                  chirpAlarm(1); 
+                  PROGMEMprintln(client,lockboth);
+                }  
               printStatus(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              }
+              break;
           }
-          if(readString.indexOf("?1") > 0) {  // disarm
-            if(privmodeEnabled==true) {
+          case '1': {  // disarm
               armAlarm(0);
               alarmState(0);
               chirpAlarm(1);  
               printStatus(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?2") > 0) { // arm
-            if(privmodeEnabled==true) {
+          case '2': { // arm
               chirpAlarm(20);        // 200 chirps = ~30 seconds delay
               armAlarm(1);                           
               printStatus(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?3") > 0) { // train
-            if(privmodeEnabled==true) {
+          case '3': { // train
               trainAlarm();
               printStatus(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?9") > 0) { // status
-            printStatus(client);
-          }
-          if(readString.indexOf("?z") > 0) { // log
-            if(privmodeEnabled==true) {
+          case 'z': { // log
               printLog(client);
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?y") > 0) { // clear log
-            if(privmodeEnabled==true) {
+          case 'y': { // clear log
               for(int i=0;i<sizeof(logKeys);i++) {
                 logKeys[i] = 0;
                 logData[i] = 0;
               }
               logCursor = 0;
-              addToLog('z',0);
-              //logDate();
+              log(LOG_CLEAR_LOG, 0,0);
               
               client.println("y");
-            }
-            else{
-              PROGMEMprintln(client,noauth);
-              logprivFail();
-            }
+              break;
           }
-          if(readString.indexOf("?w") > 0) { // Print out the date - "YYMMDDWHHmmSS"
+          case 'w': { // Print out the date - "YYMMDDWHHmmSS"
             ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
 
             client.print(year, DEC);
@@ -546,7 +547,7 @@ void loop()                                     // Main branch, runs over and ov
             client.print(minute, DEC);
             client.print(second, DEC);
           }
-          if(readString.indexOf("?x") > 0) { // Assign date/time format (?xYYMMDDWHHmmSS)
+          case 'x': { // Assign date/time format (?xYYMMDDWHHmmSS)
             int offset = readString.indexOf("?x");
             char year[3] = {readString[offset+2],readString[offset+3],'\0'};
             char mon[3] = {readString[offset+4],readString[offset+5],'\0'};
@@ -566,16 +567,50 @@ void loop()                                     // Main branch, runs over and ov
    byte month,         // 1-12
    byte year);          // 0-99
    */
+             break;
+          }
+          case 'v': { // Change the amount of data recorded to the log
+             int offset = readString.indexOf("?v=");
+             switch(readString[offset+2]){
+              case '0':{
+                logLevel = 0; // 0 - Most Verbose
+                break;
+              }
+              case '1':{
+                logLevel = 1; // 1 - Verbose
+                break;
+              }
+              case '2':{
+                logLevel = 2; // 2 - Quiet
+                break;
+              }
+              case '3':{
+                logLevel = 3; // 3 - Most Quiet
+                break;
+              }
+              default: { }
+             }
+             break;
+          }
+          default: {}
+          } // End switch on query letter
+          } // End Calls that require authentization
+          /* Calls that do not require authentation */
+          else{
 
+          if(readString.indexOf("?9") > 0) { // status
+            printStatus(client);
           }
-          if(readString.indexOf("?") < 0) {
-            PROGMEMprintln(client,title);
-            PROGMEMprintln(client,help);
+          else{
+            PROGMEMprintln(client,noauth);
+            log(LOG_PRIVELEDGE_FAILED, 0, NOT_LOGGED_IN);
           }
+          } // End calls that do not require authentication
+
           if(readString.indexOf("&e=") > 0) { // if e is passed as a second parameter, log out.
             login(strtoul("0000",NULL,16)); // 0000 = logout
           }
-
+          } // End readString has query portion
           break;
         }
         if (c == '\n') {
@@ -634,7 +669,7 @@ void loop()                                     // Main branch, runs over and ov
   if(hour==23 && minute==59 && door1Locked==false){
          doorLock(1);
          door1Locked==true;      
-         addToLog('L',3);
+         log(LOG_LOCK,0,BEDTIME);
   }
 
 
@@ -647,191 +682,13 @@ void loop()                                     // Main branch, runs over and ov
    * A 5-second window for commands is opened after each successful key access read.
    */
 
-  if(reader1Count >= 26){                           //  When tag presented to reader1 (No keypad on this reader)
-    logTagPresent(reader1,1);                       //  write log entry to serial port
-
-
-/* Check a user's security level and take action as needed. The
-*  usermask is a variable from 0..255. By default, 0 and 255 are for
-*  locked out users or uninitialized records.
-*  Modify these for each door as needed.
-*/
-
-  userMask1=checkUser(reader1);    
-
-  if(userMask1>=0) {    
-    
-   switch(userMask1) {
-
-   case 0:                                      // No outside privs, do not log denied.
-    {                                           // authenticate only.
-    logAccessGranted(reader1, 1);
-    break;
-    }
-
-   case 20:                                                // Example Limited hours user
-    {                                                      // Can enter from 5:00pm to 11:00pm
-    ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
-    if((hour >=17) && (hour <=23)){
-         logAccessGranted(reader1, 1);                    // Log and unlock door 2
-         alarmState(0);
-         armAlarm(0);                                     //  Deactivate Alarm
-      //   chirpAlarm(1);                            
-         door1locktimer=millis();
-         doorUnlock(1);                                   // Unlock the door.
-    }
-     break;
-    }      
-
-   case 255:                                              // Locked out user     
-    {
-     addToLog('f',userMask1);
-     break;
-    }
-   
-   default:  
-    {            
-         logAccessGranted(reader1, 1);           // Log and unlock door 1
-         alarmState(0);
-         armAlarm(0);                            //  Deactivate Alarm                  
-         door1locktimer=millis();
-         doorUnlock(1);                          // Unlock the door.
-         break;
-    }
-                       }                                      
-
+  if(reader1Count >= 26) {                           //  When tag presented to reader1 (No keypad on this reader)
+    processTagAccess(reader1, 1);
   }
-    else 
-    {                                           
-    if(checkSuperuser(reader1) >= 0) {              // Check if a superuser, grant access.
-      logAccessGranted(reader1, 1);                 // Log and unlock door 1
-         alarmState(0);
-         armAlarm(0);                               //  Deactivate Alarm
-         door1locktimer=millis();
-         doorUnlock(1);                             // Unlock the door.
-                                      }
-      else{                                
-       logAccessDenied(reader1,1);                   // No tickee, no laundree
-          }
-    }
-
-    wiegand26.initReaderOne();                     // Reset for next tag scan
-
-  }
-
-
-
   
-  if(reader2Count >= 26){                                // Tag presented to reader 2
-    logTagPresent(reader2,2);                            // Write log entry to serial port
-    chirpAlarm(1);                                       // Chirp alarm to show that tag input done              
-                                                         // CHECK TAG IN OUR LIST OF USERS. -1 = no match                                  
-  keypadGranted=false;                                   // Reset the keypad authorized variable
-
-  userMask2=checkUser(reader2);    
-
-  if(userMask2>=0){    
-    switch(userMask2) {
- 
-   case 0:                         // No outside privs, do not log denied.
-    {                              // authenticate and log only.
-    logAccessGranted(reader2, 2);
-    break;
-    }
-      
-  case 10:                         // Authenticating immediately locks up and arms alarm
-    {                              // 
-    logAccessGranted(reader2, 2);
-    runCommand(0x2);
-    break;
-    }
-    
-   case 20:                                               //Limited hours user
-    {
-    ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
-    if((hour >=17) && (hour <=23)){
-         logAccessGranted(reader2, 2);                    // Log and unlock door 2
-         alarmState(0);
-         armAlarm(0);                                     //  Deactivate Alarm                           
-         door2locktimer=millis();
-         doorUnlock(2);                                   // Unlock the door.
-         keypadGranted=1;
-    }
-     break;
-    }
-  
-   case 255:                                               // Locked out      
-    {
-     addToLog('f',userMask2);
-     break;
-    }
-    
-    default:  
-    {            
-         logAccessGranted(reader2, 2);           // Log and unlock door 2
-         alarmState(0);
-         armAlarm(0);                            //  Deactivate Alarm                          
-         door2locktimer=millis();
-         doorUnlock(2);                          // Unlock the door.
-         keypadGranted=1;
-         break;
-    }
-                 }                                      
-
-  }
-    else 
-    {                                             
-     if(checkSuperuser(reader2) >= 0) {              // Check if a superuser, grant access.
-      logAccessGranted(reader2, 2);                 // Log and unlock door 2
-         alarmState(0);
-         armAlarm(0);                              //  Deactivate Alarm
-         chirpAlarm(1);                            
-         door1locktimer=millis();
-         doorUnlock(1);                            // Unlock the door.
-         keypadGranted=1;
-                                      }
-      else{                                
-      logAccessDenied(reader2,2);                 //  no tickee, no laundree
-          }
-    }
-    
-    wiegand26.initReaderTwo();                   //  Reset for next tag scan
-    unsigned long keypadTime=0;                  //  Timeout counter for  reader with key pad
-    long keypadValue=0;
-    keypadTime=millis();  
-                                         
-   if(keypadGranted==1) 
-    {
-      while((millis() - keypadTime)  <=KEYPADTIMEOUT){
-
-                                                              // If access granted, open 5 second window for pin pad commands.
-        if(reader2Count >=4){
-          if(reader2 !=0xB){                                  // Pin pad command can be any length, terminated with '#' on the keypad.
-            if(keypadValue ==0){                              // This 0..9, A..F encoding works with many Wiegand-format keypad or reader 
-              keypadValue = reader2;                          // plus keypad units.
-
-            }
-            else if(keypadValue !=0) {
-              keypadValue = keypadValue <<4;
-              keypadValue |= reader2;               
-            }
-            wiegand26.initReaderTwo();                         //Reset reader one and move on.
-          } 
-          else break;
-
-        }
-
-      }
-
-        logkeypadCommand(2,keypadValue);
-        runCommand(keypadValue);                              // Run any commands entered at the keypads.
-        wiegand26.initReaderTwo();
-      
-
-   }
-    wiegand26.initReaderTwo();                    
+  if(reader2Count >= 26){                            // Tag presented to reader 2
+    processTagAccess(reader2, 2);
   } 
-
 
   /* Check physical sensors with 
    the logic below. Behavior is based on
@@ -859,45 +716,23 @@ void loop()                                     // Main branch, runs over and ov
                                                     
       if(alarmActivated==0){                       // If alarm is armed but not currently alarming, check sensor zones.
 
-          if(pollAlarm(0) == 1 ){                   // If this zone is tripped, immediately set Alarm State to 2 (alarm delay).
-              alarmState(2);                        // Also starts the delay timer    
-              alarmDelay=millis();
-              if(sensor[0]==false) {                // Only log and save if sensor activation is new.
-               logalarmSensor(0);
-               EEPROM.write(EEPROM_ALARM,0);        // Save the alarm sensor tripped to eeprom                                      
-               sensor[0]=true;                      // Set value to not log this again                                                                        
-              }
-           } 
-          if(pollAlarm(1) == 1 ){                  // If this zone is tripped, immediately set Alarm State to 1 (alarm immediate).
-            alarmState(1);      
-             if(sensor[1]==false) {                // Only log and save if sensor activation is new.
-              logalarmSensor(1);
-              EEPROM.write(EEPROM_ALARM,1);        // Save the alarm sensor tripped to eeprom                                     
-              sensor[1]=true;                      // Set value to not log this again
-             }  
-          }
-          if(pollAlarm(2) == 1 ){                  // If this zone is tripped, immediately set Alarm State to 1 (alarm immediate).
-            alarmState(1);      
-             if(sensor[2]==false) {                // Only log and save if sensor activation is new.
-              logalarmSensor(2);
-              EEPROM.write(EEPROM_ALARM,2);        // Save the alarm sensor tripped to eeprom                                     
-              sensor[2]=true;                      // Set value to not log this again
-             }    
+	for(int i=0; i<NUM_SENSORS; i++) {        // For each of the Sensors Check their status
 
-           } 
-           
-          if(pollAlarm(3) == 1 ){                   // If this zone is tripped, immediately set Alarm State to 2 (alarm delay).
-              alarmState(2);                        // Also starts the delay timer    
-              alarmDelay=millis();
-              if(sensor[3]==false) {                // Only log and save if sensor activation is new.
-               logalarmSensor(3);
-               EEPROM.write(EEPROM_ALARM,3);        // Save the alarm sensor tripped to eeprom                                      
-               sensor[3]=true;                      // Set value to not log this again                                                                        
+          if(pollAlarm(i) == 1 ){
+              if(i == 0 || i == 3){                // If zone 0 or 3 are tripped, immediately set Alarm State to 2 (alarm delay).
+                alarmState(2);                     // Also starts the delay timer    
+                alarmDelay=millis();
               }
-           }    
-                                                                                           
-  
-                                           
+              else {
+                alarmState(1);                     // Otherwise, immediately set Alarm State to 1 (alarm immediate).
+              }
+              if(sensor[i]==false) {                // Only log and save if sensor activation is new.
+               log(LOG_ALARM_ZONE,0,i);
+               EEPROM.write(EEPROM_ALARM,i);        // Save the alarm sensor tripped to eeprom                                      
+               sensor[i]=true;                      // Set value to not log this again                                                                        
+              }
+           } 
+	}
       }
    if(alarmActivated==1)  {                         // If alarm is actively going off (siren/strobe) for 10 min (6e5=10min)
     if(millis()-alarmSirenTimer >=3.6e6)            // Check for alarm interval expired and turn off if needed
@@ -924,7 +759,7 @@ void loop()                                     // Main branch, runs over and ov
       
       if((pollAlarm(3) !=0) && (doorChime==false)) {   // Only activate door chime once per opening
         chirpAlarm(3);                  
-        logChime();
+        log(LOG_CHIME, 0, 0);
         doorChime=true;   
          }
       if(pollAlarm(3) ==0){
@@ -939,24 +774,23 @@ void loop()                                     // Main branch, runs over and ov
     }
   }
   
-// Log all motion detector activations regardless of alarm armed state. Useful for "occupancy detection"
+// Log all motion detector activations (currently 0,1) regardless of alarm armed state. Useful for "occupancy detection"
 
-          if(pollAlarm(0) == 1 ){                  // If this zone is tripped, log the action only
-          //  if(sensor[0]==false) 
-          if((millis() - sensorDelay[0]) >=7500) {
-           logalarmSensor(0);   
-           sensorDelay[0]=millis();                                                                  
-           sensor[0]=true;      }                 // Set value to not log this again for 7.5s              
-           }
+  for(int i=0; i<2; i++){
+          if(pollAlarm(i) == 1 ){                  // If this zone is tripped, log the action only
+          
+          // If the sensor has triggered but not in the last 7.5s. This will not log continual movement, only new movement. 
+          if(sensor[i]==false && ((millis() - sensorDelay[i]) >=7500 )){ 
+            log(LOG_ALARM_ZONE,0,i);   
+            sensorDelay[i]=millis();                                                                  
+            sensor[i]=true; 
+            }             
+          }
+          else if (pollAlarm(i) == 0){
+            sensor[i]=false;
+          }
+  }
 
-          if(pollAlarm(1) == 1 ){                  // If this zone is tripped, log the action only
-         //   if(sensor[1]==false) 
-          if((millis() - sensorDelay[1]) >=7500) {
-           logalarmSensor(1);   
-           sensorDelay[1]=millis();                                                            
-           sensor[1]=true;                       // Set value to not log this again for 7.5s
-          }           
-         }
   } // End of loop()
 
 
@@ -1063,7 +897,7 @@ void runCommand(long command) {         // Run any commands entered at the pin p
 
 void alarmState(byte alarmLevel) {                    //Changes the alarm status based on this flow
 
-  logalarmState(alarmLevel); 
+  log(LOG_ALARM_STATE, 0, alarmLevel); 
   switch (alarmLevel) {                              
   case 0: 
     {                                                 // If alarmLevel == 0 turn off alarm.   
@@ -1078,7 +912,7 @@ void alarmState(byte alarmLevel) {                    //Changes the alarm status
   //    digitalWrite(ALARMSTROBEPIN, HIGH);            // Optionally activate yoru strobe/chome
       alarmSirenTimer=millis();
       alarmActivated = alarmLevel;                    //Set global alarm level variable
-      logalarmTriggered();
+      log(LOG_ALARM_TRIGGERED, 0, 0);
 
       break;  
     }        
@@ -1160,20 +994,18 @@ void trainAlarm(){                       // Train the system about the default s
       delay(50);                                         // Give the readings time to settle
     }
     avg=((temp[0]+temp[1]+temp[2]+temp[3]+temp[4])/20);  // Average the results to get best values
-    addToLog('t',avg);
+    log(LOG_ALARM_TRAIN, avg,i);
     EEPROM.write((EEPROM_ALARMZONES+i),byte(avg));   //Save results to EEPROM
     avg=0;
   }
 
-  logDate();
-  //PROGMEMprintln(alarmtrainMessage);
 
 
 }
 
 void armAlarm(byte level){                       // Arm the alarm and set to level
   alarmArmed = level;
-  logalarmArmed(level);
+  log(LOG_ALARM_ARMED,0,level);
 
   sensor[0] = false;                             // Reset the sensor tripped values
   sensor[1] = false;
@@ -1190,12 +1022,149 @@ void armAlarm(byte level){                       // Arm the alarm and set to lev
  These function control lock/unlock and user lookup.
  */
 
+int processTagAccess(long reader, int doorNum) {
+
+    log(LOG_TAG_PRESENT,reader,doorNum);                 // Write log entry to serial port
+    chirpAlarm(1);                                       // Chirp alarm to show that tag input done              
+                                                         // CHECK TAG IN OUR LIST OF USERS. -1 = no match                                  
+    keypadGranted=false;                                // Reset the keypad authorized variable
+
+    userMask=checkUser(reader);    
+
+    if(userMask>=0){    
+      switch(userMask) {
+ 
+   case 0:                         // No outside privs, do not log denied.
+    {                              // authenticate and log only.
+    log(LOG_ACCESS_GRANTED,reader, doorNum);
+    break;
+    }
+      
+   case 10:                         // Authenticating immediately locks up and arms alarm
+    {                              // 
+    log(LOG_ACCESS_GRANTED,reader, doorNum);
+    runCommand(0x2);
+    break;
+    }
+    
+   case 20:                                               //Limited hours user
+    {
+    ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
+    if((hour >=17) && (hour <=23)){
+         log(LOG_ACCESS_GRANTED,reader, doorNum);                    // Log and unlock door
+         alarmState(0);
+         armAlarm(0);                                     //  Deactivate Alarm                           
+         door2locktimer=millis();
+         doorUnlock(doorNum);                                   // Unlock the door.
+         keypadGranted=1;
+    }
+     break;
+    }
+  
+   case 255:                                               // Locked out      
+    {
+     log(LOG_LOCKED_OUT_USER, reader,userMask);
+     break;
+    }
+    
+    default:  
+    {            
+         log(LOG_ACCESS_GRANTED,reader, doorNum);           // Log and unlock door
+         alarmState(0);
+         armAlarm(0);                            //  Deactivate Alarm                          
+         door2locktimer=millis();
+         doorUnlock(doorNum);                          // Unlock the door.
+         keypadGranted=1;
+         break;
+    }
+                 }                                      
+
+  }
+    else 
+    {                                             
+     if(checkSuperuser(reader) >= 0) {              // Check if a superuser, grant access.
+      log(LOG_ACCESS_GRANTED,reader, doorNum);       // Log and unlock door 2
+         alarmState(0);
+         armAlarm(0);                              //  Deactivate Alarm
+         chirpAlarm(1);                            
+         door1locktimer=millis();
+         doorUnlock(doorNum);                      // Unlock the door.
+         keypadGranted=1;
+                                      }
+      else{                                
+      log(LOG_ACCESS_DENIED,reader,doorNum);                 //  no tickee, no laundree
+          }
+    }
+    
+    switch(doorNum)
+    {
+      case 1:
+      {
+        wiegand26.initReaderOne();                   //  Reset for next tag scan
+        break;
+      }
+      case 2:
+      {
+        wiegand26.initReaderTwo();                   //  Reset for next tag scan
+        unsigned long keypadTime=0;                  //  Timeout counter for  reader with key pad
+        long keypadValue=0;
+        keypadTime=millis();
+        break;
+      }
+      default:
+      {}
+    }  
+                                         
+   if(keypadGranted==1) 
+    {
+      while((millis() - keypadTime)  <=KEYPADTIMEOUT){
+
+                                                     // If access granted, open 5 second window for pin pad commands.
+        if(reader2Count >=4){
+          if(reader !=0xB){                         // Pin pad command can be any length, terminated with '#' on the keypad.
+            if(keypadValue ==0){                     // This 0..9, A..F encoding works with many Wiegand-format keypad or reader 
+              keypadValue = reader;                 // plus keypad units.
+
+            }
+            else if(keypadValue !=0) {
+              keypadValue = keypadValue <<4;
+              keypadValue |= reader;               
+            }
+            wiegand26.initReaderTwo();               //Reset reader one and move on.
+          } 
+          else break;
+
+        }
+
+      }
+
+        log(LOG_KEYPAD_COMMAND,keypadValue,doorNum);
+        runCommand(keypadValue);                              // Run any commands entered at the keypads.
+        switch(doorNum)
+        {
+          case 1:
+          {
+            wiegand26.initReaderOne();                   //  Reset for next tag scan
+            break;
+          }
+          case 2:
+          {
+            wiegand26.initReaderTwo();
+            break;
+          }
+          default:
+          {}
+        }  
+      
+
+   }
+}
+
 int checkSuperuser(long input){       // Check to see if user is in the user list. If yes, return their index value.
 int found=-1;
   for(int i=0; i<=numUsers; i++){   
     if(input == superUserList[i]){
-      logDate();
-      addToLog('Q',i);
+      log(LOG_SUPERUSER, input, i);
       found=i;
       return found;    
     }
@@ -1211,8 +1180,7 @@ byte dp=1;
    else(dp=DOORPIN2);
   
   digitalWrite(dp, HIGH);
-  addToLog('U',input);
-
+  log(LOG_UNLOCK, 0, input);
 }
 
 void doorLock(int input) {          //Send a lock signal to the door and flash the Door LED
@@ -1222,8 +1190,7 @@ byte dp=1;
    else(dp=DOORPIN2);
 
   digitalWrite(dp, LOW);
-  addToLog('L',input);
-
+  log(LOG_LOCK, 0, input);
 }
 void unlockall() {
   doorUnlock(1);
@@ -1246,80 +1213,154 @@ void lockall() {                      //Lock down all doors. Can also be run per
 }
 
 
-void logDate()
+void log(byte Action, long LongInfo, byte ShortInfo)
 {
   ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
   addToLog('H',hour);
   addToLog('M',minute);
   addToLog('E',second);
-}
+
+  switch(logLevel) {
+   // Most Verbose Logging level.
+  case 0: {
+   switch(Action) {
+    case LOG_CHIME: {		// Chime
+     //PROGMEMprintln(doorChimeMessage);
+    }
+    case LOG_ALARM_ZONE: {		// Log Alarm zone events - ShortInfo is zone
+     addToLog('s',ShortInfo); 
+     break;
+    }
+    case LOG_ALARM_STATE: {		// Log Alarm State - ShortInfo is alarm level
+     addToLog('m',ShortInfo);
+     break;
+    }
+    case LOG_ALARM_ARMED: {		//log Alarm Armed - ShortInof is alarm level
+     addToLog('A',ShortInfo);
+     break;
+    }
+    case LOG_HARDWARE_TEST: {
+     break;
+    }
+    default: {}
+    }
+   }
+
+   // Verbose Logging level.
+   case 1: {
+   switch(Action) {
+    case LOG_ACCESS_GRANTED: {		// Log Access Granted event - LongInfo is user, ShortInfo door number
+     addToLog('G',LongInfo%divisor); 
+     addToLog('g',LongInfo/divisor); 
+     break;
+    }
+    case LOG_TAG_PRESENT: {		// Log Tag Presented event - LongInfo is user, ShortInfo door number
+     addToLog('R',LongInfo%divisor); 
+     addToLog('r',LongInfo/divisor); 
+     break;
+    }
+    case LOG_CHECK_USER: {
+     addToLog('c', ShortInfo);
+     break;
+    }
+
+    default: {}
+    }
+   }
+
+   // Queit Logging level.
+   case 2: {
+   switch(Action) {
+    case LOG_ACCESS_DENIED: {		// Log Access Denied event - LongInfo is user, ShortInfo door number
+     addToLog('D',LongInfo%divisor); 
+     addToLog('d',LongInfo/divisor); 
+     break;
+    }
+    case LOG_KEYPAD_COMMAND: {		// Log Keypad command - logkeypadCommand(byte user, long command) 
+     addToLog('C',LongInfo%divisor); 
+     addToLog('c',LongInfo/divisor); 
+     break;
+    }
+    case LOG_UNLOCK: {			// Log unlock event - LongInfo is user, ShortInfo is door
+     addToLog('U',LongInfo%divisor); 
+     addToLog('u',LongInfo/divisor); 
+     break;
+    }
+    case LOG_LOCK: {			// Log lock event - ShortInfo is door number
+     addToLog('L',ShortInfo); 
+     break;
+    }
+    case LOG_LOGIN_SUCCESS: {
+     addToLog('S',0);
+     break;
+    }
+    case LOG_SUPERUSER: {		// Log superuser card used - ShortInfo is the SuperUser number
+       addToLog('Q',ShortInfo);
+     break;
+    }
+    case LOG_ALARM_TRAIN: {
+     //PROGMEMprintln(alarmtrainMessage);
+     addToLog('t',LongInfo/divisor);	// Log training of sensor values - LongInfo is sensor average, ShortInfo is sensor number
+     break;
+    }
+
+    default: {}
+    }
+   }
+
+   // Most Queit Logging level. These will always be logged.
+   default:{
+   switch(Action) {
+    case LOG_REBOOT: {		// Reboot - Log system startup
+     //PROGMEMprintln(rebootMessage);
+     break;
+    }
+    case LOG_ALARM_TRIGGERED: {		// Log Alarm Triggered
+     addToLog('T',0);
+     break;
+    }
+    case LOG_PRIVELEDGE_FAILED: {
+     addToLog('F',2);
+     break;
+    }
+    case LOG_CLEAR_USERS: {
+     addToLog('Z',0);
+     break;
+    }
+    case LOG_ADD_USER_FAIL: {
+     addToLog('i',LongInfo);
+     break;
+    }
+    case LOG_ADD_USER_SUCCESS: {
+     addToLog('a',LongInfo);
+     break;
+    }
+    case LOG_DELETE_USER_FAIL: {
+     addToLog('I',LongInfo);
+     break;
+    }
+    case LOG_DELETE_USER_SUCCESS: {
+     addToLog('d',LongInfo);
+     break;
+    }
+    case LOG_LOGIN_FAIL: {
+     addToLog('F',1);
+     break;
+    }
+    case LOG_CLEAR_LOG: {
+     addToLog('z',0);
+     break;
+    }
+    case LOG_LOCKED_OUT_USER: {		// log Locked out user attempted access, LongInfo user, ShortInfo usermask
+     addToLog('f',ShortInfo);
+     break;
+    }
+    default: {}
+    }
+   }
+  }
 
 
-void logReboot() {                                  //Log system startup
-  logDate();
-    //PROGMEMprintln(rebootMessage);
-}
-
-void logChime() {
-  //logDate();
-    //PROGMEMprintln(doorChimeMessage);
-}
-
-void logTagPresent (long user, byte reader) {     //Log Tag Presented events
-  //logDate();
-  addToLog('R',user%divisor); 
-  addToLog('r',user/divisor); 
-}
-
-void logAccessGranted(long user, byte reader) {     //Log Access events
-  logDate();
-  addToLog('G',user%divisor); 
-  addToLog('g',user/divisor); 
-}                                         
-
-void logAccessDenied(long user, byte reader) {     //Log Access denied events
-  logDate();
-  addToLog('D',user%divisor); 
-  addToLog('d',user/divisor); 
-}   
-
-void logkeypadCommand(byte user, long command){
-  logDate();
-  addToLog('C',user%divisor); 
-  addToLog('c',user/divisor); 
-}  
-
-
-
-
-void logalarmSensor(byte zone) {     //Log Alarm zone events
-  //logDate();
-  addToLog('s',zone); 
-}
-
-void logalarmTriggered() {
-  logDate();
-  addToLog('T',0);
-}
-
-void logunLock(long user, byte door) {        //Log unlock events
-  logDate();
-  addToLog('U',user%divisor); 
-  addToLog('u',user/divisor); 
-}
-
-void logalarmState(byte level) {        //Log unlock events
-  //logDate();
-  addToLog('m',level);
-}
-
-void logalarmArmed(byte level) {        //Log unlock events
-  logDate();
-  addToLog('A',level);
-}
-
-void logprivFail() {
-  addToLog('F',2);
 }
 
 /*
@@ -1343,7 +1384,7 @@ void hardwareTest(long iterations)
   pinMode(9,OUTPUT);
 
   for(long counter=1; counter<=iterations; counter++) {                                  // Do this number of times specified
-    logDate();
+    log(LOG_HARDWARE_TEST, 0 ,0);
     
     Serial.print("\n"); 
     Serial.println("Pass: "); 
@@ -1387,8 +1428,7 @@ void clearUsers()    //Erases all users from EEPROM
 {
   for(int i=EEPROM_FIRSTUSER; i<=EEPROM_LASTUSER; i++){
     EEPROM.write(i,0);  
-    logDate();
-    addToLog('Z',0);
+    log(LOG_CLEAR_USERS, 0, 0);
   }
 }
 
@@ -1397,10 +1437,8 @@ void addUser(int userNum, byte userMask, unsigned long tagNumber)       // Modif
   int offset = (EEPROM_FIRSTUSER+(userNum*5));                          // Find the offset to write this user to
   byte EEPROM_buffer[5] ={0};                                           // Buffer for creating the 4 byte values to write. Usermask is stored in byte 5.
 
-  logDate();
-
   if((userNum <0) || (userNum > NUMUSERS)) {                            // Do not write to invalid EEPROM addresses.
-    addToLog('i',userNum);
+    log(LOG_ADD_USER_FAIL, userNum, 0);
   }
   else
   {
@@ -1414,7 +1452,7 @@ void addUser(int userNum, byte userMask, unsigned long tagNumber)       // Modif
       EEPROM.write((offset+i), (EEPROM_buffer[i])); // Store the resulting value in 5 bytes of EEPROM.
     }
 
-    addToLog('a',userNum);
+    log(LOG_ADD_USER_SUCCESS, userNum, 0);
 
   }
 }
@@ -1423,11 +1461,9 @@ void deleteUser(int userNum)                                            // Delet
 {                                                                       // Users number 0..NUMUSERS
   int offset = (EEPROM_FIRSTUSER+(userNum*5));                          // Find the offset to write this user to
 
-  logDate();
-
   if((userNum <0) || (userNum > NUMUSERS)) {                            // Do not write to invalid EEPROM addresses.
 
-    addToLog('I',userNum);
+    log(LOG_DELETE_USER_FAIL, userNum, 0);
   }
   else
   {
@@ -1435,7 +1471,7 @@ void deleteUser(int userNum)                                            // Delet
       EEPROM.write((offset+i), 0xFF); // Store the resulting value in 5 bytes of EEPROM.
                                                     // Starting at offset.
     }
-    addToLog('d',userNum);
+    log(LOG_DELETE_USER_SUCCESS, userNum, 0);
   }
 
 }
@@ -1449,9 +1485,6 @@ int checkUser(unsigned long tagNumber)                                  // Check
   unsigned long EEPROM_buffer=0;                                         // Buffer for recreating tagNumber from the 4 stored bytes.
   int found=-1;
   
-  logDate();
-
-
   for(int i=EEPROM_FIRSTUSER; i<=(EEPROM_LASTUSER-5); i=i+5){
 
 
@@ -1466,13 +1499,13 @@ int checkUser(unsigned long tagNumber)                                  // Check
 
 
     if((EEPROM_buffer == tagNumber) && (tagNumber !=0xFFFFFFFF) && (tagNumber !=0x0)) {    // Return a not found on blank (0xFFFFFFFF) entries 
-      addToLog('c',((i-EEPROM_FIRSTUSER)/5));
+      log(LOG_CHECK_USER, 0, (i-EEPROM_FIRSTUSER)/5);
       found = EEPROM.read(i+4);
       return found;
     }                             
 
   }
-  addToLog('c',0);
+  log(LOG_CHECK_USER, 0, 0);
   delay(1000);                                                            // Delay to prevent brute-force attacks on reader
   return found;                        
 }
@@ -1517,22 +1550,21 @@ void dumpUser(EthernetClient client, byte usernum)                     // Return
 }
 
 boolean login(long input) {
-  //logDate();
   if((consoleFail>=5) && (millis()-consolefailTimer<300000))  // Do not allow priv mode if more than 5 failed logins in 5 minute
   {  
-    addToLog('F',1);
+    log(LOG_LOGIN_FAIL,0,0);
     return false;
   }
   else {
     if (input == PRIVPASSWORD)
     {
       consoleFail=0; 
-      addToLog('S',0);
+      log(LOG_LOGIN_SUCCESS, 0, 0);
       privmodeEnabled=true;
       return true;
     }
     else {
-      //addToLog('F',0);
+      log(LOG_LOGIN_FAIL,0,0);
       privmodeEnabled=false;    
       if(consoleFail==0) {                // Set the timeout for failed logins
         consolefailTimer=millis();
