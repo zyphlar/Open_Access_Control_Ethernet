@@ -1,7 +1,7 @@
 /*
  * Open Source RFID Access Controller - Ethernet Branch
  *
- * 2/9/2013 v0.03 (branch based on upstream 4/3/2011 v1.32)
+ * 3/11/2013 v0.04 (branch based on upstream 4/3/2011 v1.32)
  * Will Bradley - will@heatsynclabs.org
  * Short Tie - tie.short@gmail.com
  * 
@@ -79,8 +79,7 @@
  * s=alarm sensor (# zone)
  * t=alarm trained (#=sensor value)
  * T=alarm triggered (0)
- * U=unlocked door (1=door1, 2=door2, # card num)
- * u=second half of card
+ * U=unlocked door (1=door1, 2=door2)
  * Z=user db cleared (0)
  * z=log cleared (0)
  *   Log Format:
@@ -225,7 +224,7 @@ unsigned long keypadValue=0;
 boolean privmodeEnabled = false;                               // Switch for enabling "priveleged" commands
 
 // Log buffer
-int logLevel=0;
+int logLevel=2;
 char logKeys[40]={0};
 int logData[40]={0};
 int logCursor=0;
@@ -499,8 +498,12 @@ void loop()                                     // Main branch, runs over and ov
                   chirpAlarm(1); 
                   PROGMEMprintln(client,lockboth);
                 }  
-              printStatus(client);
               }
+              else {  // not unlocking a specific door; unlock all.
+                PROGMEMprintln(client,lockboth);
+                lockall();
+              }
+              printStatus(client);
               break;
           }
           case '1': {  // disarm
@@ -592,6 +595,9 @@ void loop()                                     // Main branch, runs over and ov
              }
              break;
           }
+          case '9': {
+            printStatus(client);
+          }
           default: {}
           } // End switch on query letter
           } // End Calls that require authentization
@@ -660,17 +666,6 @@ void loop()                                     // Main branch, runs over and ov
      door2locktimer=0;
                          }   
   }   
-
-  /*  Set optional "failsafe" time to lock up every night.
-  */
-
-  ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);   // Get the current date/time
-
-  if(hour==23 && minute==59 && door1Locked==false){
-         doorLock(1);
-         door1Locked==true;      
-         log(LOG_LOCK,0,BEDTIME);
-  }
 
 
   // Notes: RFID polling is interrupt driven, just test for the reader1Count value to climb to the bit length of the key
@@ -1216,9 +1211,11 @@ void lockall() {                      //Lock down all doors. Can also be run per
 void log(byte Action, long LongInfo, byte ShortInfo)
 {
   ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
-  addToLog('H',hour);
-  addToLog('M',minute);
-  addToLog('E',second);
+  if(logLevel < 2) {
+    addToLog('H',hour);
+    addToLog('M',minute);
+    addToLog('E',second);
+  }
 
   switch(logLevel) {
    // Most Verbose Logging level.
@@ -1227,16 +1224,20 @@ void log(byte Action, long LongInfo, byte ShortInfo)
     case LOG_CHIME: {		// Chime
      //PROGMEMprintln(doorChimeMessage);
     }
-    case LOG_ALARM_ZONE: {		// Log Alarm zone events - ShortInfo is zone
-     addToLog('s',ShortInfo); 
+    case LOG_ALARM_ARMED: {		//log Alarm Armed - ShortInof is alarm level
+     addToLog('A',ShortInfo);
+     break;
+    }
+    case LOG_CHECK_USER: {
+     addToLog('c', ShortInfo);
      break;
     }
     case LOG_ALARM_STATE: {		// Log Alarm State - ShortInfo is alarm level
      addToLog('m',ShortInfo);
      break;
     }
-    case LOG_ALARM_ARMED: {		//log Alarm Armed - ShortInof is alarm level
-     addToLog('A',ShortInfo);
+    case LOG_ALARM_ZONE: {		// Log Alarm zone events - ShortInfo is zone
+     addToLog('s',ShortInfo); 
      break;
     }
     case LOG_HARDWARE_TEST: {
@@ -1249,9 +1250,8 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Verbose Logging level.
    case 1: {
    switch(Action) {
-    case LOG_ACCESS_GRANTED: {		// Log Access Granted event - LongInfo is user, ShortInfo door number
-     addToLog('G',LongInfo%divisor); 
-     addToLog('g',LongInfo/divisor); 
+    case LOG_SUPERUSER: {		// Log superuser card used - ShortInfo is the SuperUser number
+       addToLog('Q',ShortInfo);
      break;
     }
     case LOG_TAG_PRESENT: {		// Log Tag Presented event - LongInfo is user, ShortInfo door number
@@ -1259,11 +1259,14 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      addToLog('r',LongInfo/divisor); 
      break;
     }
-    case LOG_CHECK_USER: {
-     addToLog('c', ShortInfo);
+    case LOG_LOGIN_SUCCESS: {
+     addToLog('S',0);
      break;
     }
-
+    case LOG_CLEAR_LOG: {
+     addToLog('z',0);
+     break;
+    }
     default: {}
     }
    }
@@ -1271,6 +1274,11 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Queit Logging level.
    case 2: {
    switch(Action) {
+    case LOG_ACCESS_GRANTED: {		// Log Access Granted event - LongInfo is user, ShortInfo door number
+     addToLog('G',LongInfo%divisor); 
+     addToLog('g',LongInfo/divisor); 
+     break;
+    }
     case LOG_ACCESS_DENIED: {		// Log Access Denied event - LongInfo is user, ShortInfo door number
      addToLog('D',LongInfo%divisor); 
      addToLog('d',LongInfo/divisor); 
@@ -1282,20 +1290,11 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      break;
     }
     case LOG_UNLOCK: {			// Log unlock event - LongInfo is user, ShortInfo is door
-     addToLog('U',LongInfo%divisor); 
-     addToLog('u',LongInfo/divisor); 
+     addToLog('U',ShortInfo);  
      break;
     }
     case LOG_LOCK: {			// Log lock event - ShortInfo is door number
      addToLog('L',ShortInfo); 
-     break;
-    }
-    case LOG_LOGIN_SUCCESS: {
-     addToLog('S',0);
-     break;
-    }
-    case LOG_SUPERUSER: {		// Log superuser card used - ShortInfo is the SuperUser number
-       addToLog('Q',ShortInfo);
      break;
     }
     case LOG_ALARM_TRAIN: {
@@ -1303,7 +1302,6 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      addToLog('t',LongInfo/divisor);	// Log training of sensor values - LongInfo is sensor average, ShortInfo is sensor number
      break;
     }
-
     default: {}
     }
    }
@@ -1345,10 +1343,6 @@ void log(byte Action, long LongInfo, byte ShortInfo)
     }
     case LOG_LOGIN_FAIL: {
      addToLog('F',1);
-     break;
-    }
-    case LOG_CLEAR_LOG: {
-     addToLog('z',0);
      break;
     }
     case LOG_LOCKED_OUT_USER: {		// log Locked out user attempted access, LongInfo user, ShortInfo usermask
