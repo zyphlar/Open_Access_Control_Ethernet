@@ -15,13 +15,6 @@ https://github.com/zyphlar/Open_Access_Control_Ethernet
 For the latest version of the UPSTREAM software, visit:
 http://code.google.com/p/open-access-control/
 
-Features in Ethernet branch v0.01: 
--Extremely rudimentary logging via HTTP using Arduino Ethernet
-
-New features in v1.32:
--Serial console password with bad attempts lockout
--Fixed minor bugs, remove some unused functions
-
 Note: Unpack the libraries (WIEGAND26, DS1307, PCATTACH) into your arduino
 libraries directory.  This is usually:
 

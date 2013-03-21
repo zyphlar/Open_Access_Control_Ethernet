@@ -1,7 +1,7 @@
 /*
  * Open Source RFID Access Controller - Ethernet Branch
  *
- * 3/11/2013 v0.04 (branch based on upstream 4/3/2011 v1.32)
+ * 3/21/2013 v0.05 (branch based on upstream 4/3/2011 v1.32)
  * Will Bradley - will@heatsynclabs.org
  * Short Tie - tie.short@gmail.com
  * 
@@ -100,8 +100,7 @@
 #include <PCATTACH.h>     // Pcint.h implementation, allows for >2 software interupts.
 
 
-/* Static user List - Implemented as an array for testing and access override 
- */                               
+//-------- begin user config section --------
 
 #define DEBUG 2                         // Set to 2 for display of raw tag numbers in log files, 1 for only denied, 0 for never.               
 
@@ -111,6 +110,13 @@
 const long  superUserList[] = { adam, bob, carl};  // Super user table (cannot be changed by software)
 
 #define PRIVPASSWORD 0x1234             // Console "priveleged mode" password
+
+// Enter a MAC address and IP address for your controller below.
+// The IP address will be dependent on your local network:
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress ip(192,168,1,177);
+
+//-------- end user config section --------
 
 #define DOORDELAY 5000                  // How long to open door lock once access is granted. (2500 = 2.5s)
 #define SENSORTHRESHOLD 100             // Analog sensor change that will trigger an alarm (0..255)
@@ -193,7 +199,7 @@ unsigned long alarmSirenTimer=0;               // Keep track of how long alarm h
 unsigned long consolefailTimer=0;               // Console password timer for failed logins
 byte consoleFail=0;
 #define numUsers (sizeof(superUserList)/sizeof(long))                  //User access array size (used in later loops/etc)
-#define NUMDOORS (sizeof(doorPin)/sizeof(byte))
+#define NUMDOORS (sizeof(doorPin)/sizeof(byte))  //TODO: NUMDOORS isn't used and doorPin isn't defined... remove?
 #define numAlarmPins (sizeof(analogsensorPins)/sizeof(byte))
 
 //Other global variables
@@ -228,12 +234,6 @@ int logLevel=2;
 char logKeys[40]={0};
 int logData[40]={0};
 int logCursor=0;
-
-
-// Enter a MAC address and IP address for your controller below.
-// The IP address will be dependent on your local network:
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip(192,168,1,177);
 
 // Initialize the Ethernet server library
 // with the IP address and port you want to use 
@@ -339,9 +339,8 @@ void loop()                                     // Main branch, runs over and ov
             PROGMEMprintln(client,title);
             PROGMEMprintln(client,help);
           }
-          else{
-          int queryStart = readString.indexOf("?");
-
+          else {
+            
           if(readString.indexOf("?e=") > 0 || readString.indexOf("&e=") > 0) { // login
             int offset = readString.indexOf("e=");
             char pass[5] = {readString[offset+2],readString[offset+3],readString[offset+4],readString[offset+5],'\0'};
@@ -351,12 +350,13 @@ void loop()                                     // Main branch, runs over and ov
             }
             else {
               client.println("authfail");
+              break;  // we don't need extra errors below; we already know about the authfail.
             }
           }
 
           if(privmodeEnabled==true) {
 
-          switch(readString[queryStart +1]){
+          switch(readString[readString.indexOf("?")+1]){
 
           case 's': { // show user
               int offset = readString.indexOf("?s");
@@ -1067,8 +1067,17 @@ int processTagAccess(long reader, int doorNum) {
          log(LOG_ACCESS_GRANTED,reader, doorNum);           // Log and unlock door
          alarmState(0);
          armAlarm(0);                            //  Deactivate Alarm                          
-         door2locktimer=millis();
-         doorUnlock(doorNum);                          // Unlock the door.
+         switch(doorNum){
+           case 1:
+             door1locktimer=millis();
+             doorUnlock(doorNum);
+           break;
+           case 2:
+             door2locktimer=millis();
+             doorUnlock(doorNum);
+           break;
+         }
+         
          keypadGranted=1;
          break;
     }
@@ -1081,9 +1090,17 @@ int processTagAccess(long reader, int doorNum) {
       log(LOG_ACCESS_GRANTED,reader, doorNum);       // Log and unlock door 2
          alarmState(0);
          armAlarm(0);                              //  Deactivate Alarm
-         chirpAlarm(1);                            
-         door1locktimer=millis();
-         doorUnlock(doorNum);                      // Unlock the door.
+         chirpAlarm(1);                                                    
+         switch(doorNum){
+           case 1:
+             door1locktimer=millis();
+             doorUnlock(doorNum);
+           break;
+           case 2:
+             door2locktimer=millis();
+             doorUnlock(doorNum);
+           break;
+         }
          keypadGranted=1;
                                       }
       else{                                
@@ -1318,7 +1335,7 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      break;
     }
     case LOG_PRIVELEDGE_FAILED: {
-     addToLog('F',2);
+     addToLog('F',ShortInfo);
      break;
     }
     case LOG_CLEAR_USERS: {
@@ -1558,7 +1575,7 @@ boolean login(long input) {
       return true;
     }
     else {
-      log(LOG_LOGIN_FAIL,0,0);
+      //log(LOG_LOGIN_FAIL,0,0);
       privmodeEnabled=false;    
       if(consoleFail==0) {                // Set the timeout for failed logins
         consolefailTimer=millis();
