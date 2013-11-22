@@ -37,6 +37,8 @@ The software has the following features:
 -(4) Relay outputs
 
 
+USAGE:
+
 The following pin assignments are assumed by this software:
 
 -Pins 2,3 for Reader 1
@@ -44,5 +46,8 @@ The following pin assignments are assumed by this software:
 -Pins 5,6,7,8 for Relays
 -Pins A0,A1,A2,A3 for alarm sensors
 -Pins A4,A5 for SDA,SCL (I2C)
+
+You'll need to adjust the IPAddress and the PRIVPASSWORD to fit your environment/preferences.
+
 
 (g*32767+G-1)/2 
