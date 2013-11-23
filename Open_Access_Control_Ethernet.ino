@@ -1046,20 +1046,11 @@ int processTagAccess(long reader, int doorNum) {
     {
     ds1307.getDateDs1307(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);    
     if((hour >=17) && (hour <=23)){
+         log(LOG_ACCESS_GRANTED,reader, doorNum);                    // Log and unlock door
          alarmState(0);
-         armAlarm(0);                                     //  Deactivate Alarm                   
-         switch(doorNum){
-           case 1:
-             log(LOG_ACCESS_GRANTED,reader, 1);           // Log and unlock door
-             door1locktimer=millis();
-             doorUnlock(doorNum);
-           break;
-           case 2:
-             log(LOG_ACCESS_GRANTED,reader, 2);           // Log and unlock door
-             door2locktimer=millis();
-             doorUnlock(doorNum);
-           break;
-         }
+         armAlarm(0);                                     //  Deactivate Alarm                           
+         door2locktimer=millis();
+         doorUnlock(doorNum);                                   // Unlock the door.
          keypadGranted=1;
     }
      break;
@@ -1073,16 +1064,15 @@ int processTagAccess(long reader, int doorNum) {
     
     default:  
     {            
+         log(LOG_ACCESS_GRANTED,reader, doorNum);           // Log and unlock door
          alarmState(0);
          armAlarm(0);                            //  Deactivate Alarm                          
          switch(doorNum){
            case 1:
-             log(LOG_ACCESS_GRANTED,reader, 1);           // Log and unlock door
              door1locktimer=millis();
              doorUnlock(doorNum);
            break;
            case 2:
-             log(LOG_ACCESS_GRANTED,reader, 2);           // Log and unlock door
              door2locktimer=millis();
              doorUnlock(doorNum);
            break;
@@ -1095,19 +1085,18 @@ int processTagAccess(long reader, int doorNum) {
 
   }
     else 
-    {                                             
+    {                                                 
      if(checkSuperuser(reader) >= 0) {              // Check if a superuser, grant access.
+      log(LOG_ACCESS_GRANTED,reader, doorNum);       // Log and unlock door 2
          alarmState(0);
          armAlarm(0);                              //  Deactivate Alarm
-         chirpAlarm(1);                          
+         chirpAlarm(1);                                                    
          switch(doorNum){
            case 1:
-             log(LOG_ACCESS_GRANTED,reader, 1);           // Log and unlock door
              door1locktimer=millis();
              doorUnlock(doorNum);
            break;
            case 2:
-             log(LOG_ACCESS_GRANTED,reader, 2);           // Log and unlock door
              door2locktimer=millis();
              doorUnlock(doorNum);
            break;
