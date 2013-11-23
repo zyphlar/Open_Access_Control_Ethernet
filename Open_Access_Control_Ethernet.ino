@@ -138,42 +138,42 @@ IPAddress ip(192,168,1,177);
 #define ALARMSIRENPIN  relayPins[1]     // Define the alarm siren pin. This should be a LOUD siren for alarm purposes.
 
 /* Definitions for Log types */
-#define LOG_REBOOT		0
-#define LOG_CHIME		1
-#define LOG_TAG_PRESENT		2
-#define LOG_ACCESS_GRANTED	3
-#define LOG_ACCESS_DENIED	4
-#define LOG_KEYPAD_COMMAND	5
-#define LOG_ALARM_ZONE		6
-#define LOG_ALARM_TRIGGERED	7
-#define LOG_UNLOCK		8
-#define LOG_LOCK		9
-#define LOG_ALARM_STATE		10
-#define LOG_ALARM_ARMED		11
-#define LOG_PRIVELEDGE_FAILED	12
-#define LOG_ALARM_TRAIN		13
-#define LOG_SUPERUSER		14
-#define LOG_HARDWARE_TEST	15
-#define LOG_CLEAR_USERS		16
-#define LOG_ADD_USER_FAIL	17
-#define LOG_ADD_USER_SUCCESS	18
-#define LOG_DELETE_USER_FAIL	19
-#define LOG_DELETE_USER_SUCCESS	20
-#define LOG_CHECK_USER		21
-#define LOG_LOGIN_FAIL		22
-#define LOG_LOGIN_SUCCESS	23
-#define LOG_LOCKED_OUT_USER	24
-#define LOG_CLEAR_LOG		25
+#define LOG_REBOOT    0
+#define LOG_CHIME   1
+#define LOG_TAG_PRESENT   2
+#define LOG_ACCESS_GRANTED  3
+#define LOG_ACCESS_DENIED 4
+#define LOG_KEYPAD_COMMAND  5
+#define LOG_ALARM_ZONE    6
+#define LOG_ALARM_TRIGGERED 7
+#define LOG_UNLOCK    8
+#define LOG_LOCK    9
+#define LOG_ALARM_STATE   10
+#define LOG_ALARM_ARMED   11
+#define LOG_PRIVELEDGE_FAILED 12
+#define LOG_ALARM_TRAIN   13
+#define LOG_SUPERUSER   14
+#define LOG_HARDWARE_TEST 15
+#define LOG_CLEAR_USERS   16
+#define LOG_ADD_USER_FAIL 17
+#define LOG_ADD_USER_SUCCESS  18
+#define LOG_DELETE_USER_FAIL  19
+#define LOG_DELETE_USER_SUCCESS 20
+#define LOG_CHECK_USER    21
+#define LOG_LOGIN_FAIL    22
+#define LOG_LOGIN_SUCCESS 23
+#define LOG_LOCKED_OUT_USER 24
+#define LOG_CLEAR_LOG   25
 
 /* Definitions for LOG_PRIVILEDGE_FAILED */
-#define WRONG_PASSWORD		0
-#define TOO_MANY_TRIES		1
-#define NOT_LOGGED_IN		2
+#define WRONG_PASSWORD    0
+#define TOO_MANY_TRIES    1
+#define NOT_LOGGED_IN   2
 
 /* Defintions for LOG_LOCK */
-#define DOOR1			1
-#define DOOR2			2
-#define BEDTIME			3
+#define DOOR1     1
+#define DOOR2     2
+#define BEDTIME     3
 
 byte reader1Pins[]={2,3};               // Reader 1 connected to pins 4,5
 byte reader2Pins[]= {4,5};              // Reader2 connected to pins 6,7
@@ -297,7 +297,7 @@ void setup(){           // Runs once at Arduino boot-up
 
 
 
-//  Serial.begin(57600);	               	       // Set up Serial output at 8,N,1,57600bps
+//  Serial.begin(57600);                         // Set up Serial output at 8,N,1,57600bps
   
   
   log(LOG_REBOOT, 0, 0);
@@ -711,7 +711,7 @@ void loop()                                     // Main branch, runs over and ov
                                                     
       if(alarmActivated==0){                       // If alarm is armed but not currently alarming, check sensor zones.
 
-	for(int i=0; i<NUM_SENSORS; i++) {        // For each of the Sensors Check their status
+  for(int i=0; i<NUM_SENSORS; i++) {        // For each of the Sensors Check their status
 
           if(pollAlarm(i) == 1 ){
               if(i == 0 || i == 3){                // If zone 0 or 3 are tripped, immediately set Alarm State to 2 (alarm delay).
@@ -727,7 +727,7 @@ void loop()                                     // Main branch, runs over and ov
                sensor[i]=true;                      // Set value to not log this again                                                                        
               }
            } 
-	}
+  }
       }
    if(alarmActivated==1)  {                         // If alarm is actively going off (siren/strobe) for 10 min (6e5=10min)
     if(millis()-alarmSirenTimer >=3.6e6)            // Check for alarm interval expired and turn off if needed
@@ -1238,10 +1238,10 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Most Verbose Logging level.
   case 0: {
    switch(Action) {
-    case LOG_CHIME: {		// Chime
+    case LOG_CHIME: {   // Chime
      //PROGMEMprintln(doorChimeMessage);
     }
-    case LOG_ALARM_ARMED: {		//log Alarm Armed - ShortInof is alarm level
+    case LOG_ALARM_ARMED: {   //log Alarm Armed - ShortInof is alarm level
      addToLog('A',ShortInfo);
      break;
     }
@@ -1249,11 +1249,11 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      addToLog('c', ShortInfo);
      break;
     }
-    case LOG_ALARM_STATE: {		// Log Alarm State - ShortInfo is alarm level
+    case LOG_ALARM_STATE: {   // Log Alarm State - ShortInfo is alarm level
      addToLog('m',ShortInfo);
      break;
     }
-    case LOG_ALARM_ZONE: {		// Log Alarm zone events - ShortInfo is zone
+    case LOG_ALARM_ZONE: {    // Log Alarm zone events - ShortInfo is zone
      addToLog('s',ShortInfo); 
      break;
     }
@@ -1267,11 +1267,11 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Verbose Logging level.
    case 1: {
    switch(Action) {
-    case LOG_SUPERUSER: {		// Log superuser card used - ShortInfo is the SuperUser number
+    case LOG_SUPERUSER: {   // Log superuser card used - ShortInfo is the SuperUser number
        addToLog('Q',ShortInfo);
      break;
     }
-    case LOG_TAG_PRESENT: {		// Log Tag Presented event - LongInfo is user, ShortInfo door number
+    case LOG_TAG_PRESENT: {   // Log Tag Presented event - LongInfo is user, ShortInfo door number
      addToLog('R',LongInfo%divisor); 
      addToLog('r',LongInfo/divisor); 
      break;
@@ -1291,32 +1291,32 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Queit Logging level.
    case 2: {
    switch(Action) {
-    case LOG_ACCESS_GRANTED: {		// Log Access Granted event - LongInfo is user, ShortInfo door number
+    case LOG_ACCESS_GRANTED: {    // Log Access Granted event - LongInfo is user, ShortInfo door number
      addToLog('G',LongInfo%divisor); 
      addToLog('g',LongInfo/divisor); 
      break;
     }
-    case LOG_ACCESS_DENIED: {		// Log Access Denied event - LongInfo is user, ShortInfo door number
+    case LOG_ACCESS_DENIED: {   // Log Access Denied event - LongInfo is user, ShortInfo door number
      addToLog('D',LongInfo%divisor); 
      addToLog('d',LongInfo/divisor); 
      break;
     }
-    case LOG_KEYPAD_COMMAND: {		// Log Keypad command - logkeypadCommand(byte user, long command) 
+    case LOG_KEYPAD_COMMAND: {    // Log Keypad command - logkeypadCommand(byte user, long command) 
      addToLog('C',LongInfo%divisor); 
      addToLog('c',LongInfo/divisor); 
      break;
     }
-    case LOG_UNLOCK: {			// Log unlock event - LongInfo is user, ShortInfo is door
+    case LOG_UNLOCK: {      // Log unlock event - LongInfo is user, ShortInfo is door
      addToLog('U',ShortInfo);  
      break;
     }
-    case LOG_LOCK: {			// Log lock event - ShortInfo is door number
+    case LOG_LOCK: {      // Log lock event - ShortInfo is door number
      addToLog('L',ShortInfo); 
      break;
     }
     case LOG_ALARM_TRAIN: {
      //PROGMEMprintln(alarmtrainMessage);
-     addToLog('t',LongInfo/divisor);	// Log training of sensor values - LongInfo is sensor average, ShortInfo is sensor number
+     addToLog('t',LongInfo/divisor);  // Log training of sensor values - LongInfo is sensor average, ShortInfo is sensor number
      break;
     }
     default: {}
@@ -1326,11 +1326,11 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    // Most Queit Logging level. These will always be logged.
    default:{
    switch(Action) {
-    case LOG_REBOOT: {		// Reboot - Log system startup
+    case LOG_REBOOT: {    // Reboot - Log system startup
      //PROGMEMprintln(rebootMessage);
      break;
     }
-    case LOG_ALARM_TRIGGERED: {		// Log Alarm Triggered
+    case LOG_ALARM_TRIGGERED: {   // Log Alarm Triggered
      addToLog('T',0);
      break;
     }
@@ -1362,7 +1362,7 @@ void log(byte Action, long LongInfo, byte ShortInfo)
      addToLog('F',1);
      break;
     }
-    case LOG_LOCKED_OUT_USER: {		// log Locked out user attempted access, LongInfo user, ShortInfo usermask
+    case LOG_LOCKED_OUT_USER: {   // log Locked out user attempted access, LongInfo user, ShortInfo usermask
      addToLog('f',ShortInfo);
      break;
     }
