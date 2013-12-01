@@ -1,7 +1,7 @@
 /*
  * Open Source RFID Access Controller - Ethernet Branch
  *
- * 3/21/2013 v0.05 (branch based on upstream 4/3/2011 v1.32)
+ * 12/01/2013 v0.06 (branch based on upstream 4/3/2011 v1.32)
  * Will Bradley - will@heatsynclabs.org
  * Short Tie - tie.short@gmail.com
  * 
@@ -252,16 +252,16 @@ PCATTACH pcattach;    // Software interrupt library
 */
 
 
-const prog_uchar httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
-const prog_uchar title[]          PROGMEM  = {"<h2>OAC</h2>"};
-const prog_uchar help[]           PROGMEM  = {"<hr/>See source for command syntax."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l ?l=1 ?l=2 - lock all/1/2\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log\n?w0000000000000 - show year-month-day-dayofweek-hour-min-sec\n?x - set year-month-day-dayofweek-hour-min-sec\n?v=0 ?v=1 ?v=2 ?v=3 - set logging to MostVerbose/Verbose/Quiet/MostQuiet</pre>"}; 
-const prog_uchar noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
-const prog_uchar unlockboth[]     PROGMEM  = {"Unlocked all."};
-const prog_uchar unlock1[]        PROGMEM  = {"Unlocked 1."};
-const prog_uchar unlock2[]        PROGMEM  = {"Unlocked 2."};
-const prog_uchar open1[]          PROGMEM  = {"Opened 1."};
-const prog_uchar open2[]          PROGMEM  = {"Opened 2."};
-const prog_uchar lockboth[]       PROGMEM  = {"Locked all."};
+const unsigned char httpheaderok[]   PROGMEM  = {"HTTP/1.1 200 OK\r\nCache-Control: no-store\r\nContent-Type: text/html\r\n\r\n"};
+const unsigned char title[]          PROGMEM  = {"<h2>Open Access Control</h2>"};
+const unsigned char help[]           PROGMEM  = {"<hr/>See help[] source for command syntax (https://github.com/zyphlar/Open_Access_Control_Ethernet)."};  //<pre>Numbers must be padded.\n\n?e=0000 - enable priv (0 to logout)\n?s000 - show user\n?m000&p000&t00000000 - modify user(0-200) perm(0-255) tag(0-f)\n?a - list all\n?r000 - remove user\n?o1 ?o2 - open door 1/2\n?u ?u=1 ?u=2 - unlock all/1/2\n?l ?l=1 ?l=2 - lock all/1/2\n?1 - disarm\n?2 - arm\n?3 - train\n?9 - status\n?z - show log\n?y - clear log\n?w0000000000000 - show year-month-day-dayofweek-hour-min-sec\n?x - set year-month-day-dayofweek-hour-min-sec\n?v=0 ?v=1 ?v=2 ?v=3 - set logging to MostVerbose/Verbose/Quiet/MostQuiet</pre>"}; 
+const unsigned char noauth[]         PROGMEM  = {"<a href='/'>Not logged in.</a>"};
+const unsigned char unlockboth[]     PROGMEM  = {"Unlocked all."};
+const unsigned char unlock1[]        PROGMEM  = {"Unlocked 1."};
+const unsigned char unlock2[]        PROGMEM  = {"Unlocked 2."};
+const unsigned char open1[]          PROGMEM  = {"Opened 1."};
+const unsigned char open2[]          PROGMEM  = {"Opened 2."};
+const unsigned char lockboth[]       PROGMEM  = {"Locked all."};
 
 const int divisor = 32767; 
 
@@ -1598,20 +1598,20 @@ boolean login(long input) {
 }
 
 void printStatus(EthernetClient client) {
-  client.println("<pre>");
-  client.print("Alarm armed:");
-  client.println(alarmArmed,DEC);
-  client.print("Alarm activated:");
+  client.println("{");
+  client.print("\"armed\":");
+  client.print(alarmArmed,DEC);
+  client.print(",\"activated\":");
   client.println(alarmActivated,DEC);
-  client.print("Alarm 3:");
+  client.print(",\"alarm_3\":");
   client.println(pollAlarm(3),DEC);
-  client.print("Alarm 2:");
-  client.println(pollAlarm(2),DEC);                  
-  client.print("Door 1 locked:");
-  client.println(door1Locked);                    
-  client.print("Door 2 locked:");
-  client.println(door2Locked); 
-  client.println("</pre>"); 
+  client.print(",\"alarm_2\":");
+  client.println(pollAlarm(2),DEC);
+  client.print(",\"door_1_locked\":");
+  client.println(door1Locked);
+  client.print(",\"door_2_locked\":");
+  client.println(door2Locked);
+  client.println("}");
 }
 
 
@@ -1636,7 +1636,7 @@ void printLog(EthernetClient client) {
 }
 
 
-void PROGMEMprintln(EthernetClient client, const prog_uchar str[])    // Function to retrieve strings from program memory
+void PROGMEMprintln(EthernetClient client, const unsigned char str[])    // Function to retrieve strings from program memory
 {
   char c;
   if(!str) return;
