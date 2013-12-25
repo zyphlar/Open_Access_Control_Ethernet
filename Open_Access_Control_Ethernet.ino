@@ -72,6 +72,7 @@
  * L=locked (1=door1, 2=door2, 3=bedtime)
  * M=minute (#=minute)
  * m=alarm state (# level)
+ * p=power on (reboot)
  * R=read tag (# card num)
  * r=second half of tag
  * Q=superuser authed (#=superuser)
@@ -1327,7 +1328,7 @@ void log(byte Action, long LongInfo, byte ShortInfo)
    default:{
    switch(Action) {
     case LOG_REBOOT: {    // Reboot - Log system startup
-     //PROGMEMprintln(rebootMessage);
+     addToLog('p',1);
      break;
     }
     case LOG_ALARM_TRIGGERED: {   // Log Alarm Triggered
